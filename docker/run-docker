@@ -1,0 +1,97 @@
+#!/bin/bash
+
+usage()
+{
+cat <<EOF
+Usage: run_docker.sh <opts>
+  -w/--workspace    workspace folder (required)
+  -v/--volume       mount additional volume (optional)
+  -r/--root         run as root (optional)
+EOF
+}
+
+parseargs()
+{
+  opts=$(getopt -o w:d:v:r --long workspace:volume:root -- "$@")
+
+  if [ $? != 0 ]; then
+    echo "Failed to parse arguments."
+    usage
+    exit 1
+  fi
+  eval set -- "$opts"
+
+  while true; do
+    case "$1" in
+    -w|--workspace)
+      shift
+      workspace_location=$1
+      ;;
+    -v|--volume)
+      shift
+      volume_location=$1
+      ;;
+    -r|--root)
+      run_as_root=true
+      ;;
+    --)
+      break
+      ;;
+    *)
+      shift
+      echo "Unexpected argument. $1"
+      usage
+      exit 1
+      ;;
+    esac
+    shift
+  done
+
+  if [ -z "$workspace_location" ]; then
+    echo "Missing workspace location"
+    usage
+    exit 1
+  fi
+}
+
+run_docker()
+{
+  run_opts=""
+  if [ -z $run_as_root ]; then
+    # Generate dummy passwd and group to match the host IDs
+    uname=$(id -un) && uid=$(id -u)
+    gname_list=($(id -Gn)) && gid_list=($(id -G))
+
+    passwd=$(tempfile) && group=$(tempfile)
+    run_opts="$run_opts -v $passwd:/etc/passwd:ro -v $group:/etc/group:ro --user $uid:${gid_list[0]}"
+
+    cat /etc/passwd >> $passwd
+    echo "$uname:x:$uid:${gid_list[0]}::$HOME:/bin/bash" >> $passwd
+
+    cat /etc/group >> $group
+    for i in ${!gid_list[*]}; do
+      echo "${gname_list[$i]}:x:${gid_list[$i]}:$uname" >> $group
+      run_opts="$run_opts --group-add ${gid_list[$i]}"
+    done
+  fi
+
+  if [[ -n $volume_location ]]; then
+    run_opts="$run_opts -v $volume_location:$volume_location"
+  fi
+
+  docker run --gpus all -it --rm -d \
+    --ipc=host --net=host \
+    --name unitraj \
+    -e DISPLAY=$DISPLAY \
+    -v $workspace_location:/workspace \
+    -v /mnt/automlops-fraprd:/mnt/automlops-fraprd \
+    -v /tmp/.X11-unix:/tmp/.X11-unix \
+    -w /workspace \
+    docker-registry.qualcomm.com/luobwang/planning-intern:unitraj /bin/bash
+}
+
+# Parse command line arguments
+parseargs "$@"
+
+# run docker
+run_docker

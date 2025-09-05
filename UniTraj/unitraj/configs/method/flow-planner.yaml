@@ -1,0 +1,60 @@
+# common
+model_name: flow-planner
+
+# model
+use_map_image: False
+use_map_lanes: True
+num_modes: 6
+num_agent_feature: 37 
+num_map_feature: 29
+hidden_size: 256
+num_encoder_layers: 2
+tx_hidden_size: 1024
+tx_num_heads: 4
+dropout: 0.1
+kl_weight: 20.0
+use_FDEADE_aux_loss: True
+num_queries_enc: 192
+
+# decoder
+dec_hidden_size: 256
+chunk_size: 2
+action_type: 'trajectory' # ['trajectory', 'velocity', 'ik']
+dit_depth: 2
+mlp_ratio: 2
+num_heads: 4
+
+# train
+max_epochs: 150 #150 #40
+warm_up_epoch: 5
+learning_rate: 0.0001 # 0.00075 # 1e-3 for lanegcn
+ewc_lambda: 2000
+grad_clip_norm: 5
+train_batch_size: 128 #32 #128
+eval_batch_size: 512 #32 #128
+train_type: 'uncond'  # ['uncond', 'cond', 'cfg']
+route_drop_ratio: 0.1
+supervise_loss_type: 'v' # ['v', 'x_0', 'eps']
+
+# test 
+if_test: False
+ckpt_path: null
+num_samples: 6
+num_steps: 10
+
+# data related
+max_num_agents: 32
+map_range: 100
+max_num_roads: 384
+max_num_route_lanes: 25
+max_points_per_lane: 30 # will be overwritten if manually_split_lane is True
+route_encoder_drop_path_rate: 0.1
+manually_split_lane: False
+# lane split related params
+point_sampled_interval: 1
+num_points_each_polyline: 20
+vector_break_dist_thresh: 1.0
+# modelled agents 
+num_observed_agents: 64
+num_modeled_agents: 64
+supervise_agent_type: 'all' # 'all' or 'predicted', do not use predicted for NuPlan
