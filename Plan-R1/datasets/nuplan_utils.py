@@ -196,7 +196,7 @@ def get_features(ego_state_buffer,
                  max_drivable_area_segments: int = 30,
                  max_static_objects: int = 30,
                  radius: float = 120,
-                 margin: float = 20,
+                 margin: float = 50,
                  is_simulation: bool=False,
                  static_object_tokens: List[str]=None,
                  dynamic_object_tokens: List[str]=None) -> Dict:
@@ -287,7 +287,7 @@ def get_features(ego_state_buffer,
                 agent_identity[index] = torch.tensor(_agent_identity.index('AGENT'), dtype=torch.uint8)
             agent_position[index, i, 0] = neighbor_agent.center.x
             agent_position[index, i, 1] = neighbor_agent.center.y
-            agent_visible_mask[index, i] = True
+            agent_visible_mask[index, i] = True  
             agent_heading[index, i] = neighbor_agent.center.heading
             agent_velocity[index, i, 0] = neighbor_agent.velocity.x
             agent_velocity[index, i, 1] = neighbor_agent.velocity.y

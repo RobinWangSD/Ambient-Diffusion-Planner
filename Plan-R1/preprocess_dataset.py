@@ -126,10 +126,10 @@ class NuplanDataset(Dataset):
         self.val_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-val-PlanR1.pt"))
                 
         if self.parallel:
-            batch_size = 50
+            batch_size = 24
             process_map(self.process_batch_scenario, 
                         [scenarios[i:i+batch_size] for i in range(0, len(scenarios), batch_size)],
-                        max_workers=100, 
+                        max_workers=24, 
                         chunksize=1)
         else:
             for scenario in tqdm(scenarios):
@@ -166,7 +166,7 @@ class NuplanDataset(Dataset):
         traffic_lights = scenario.get_traffic_light_status_at_iteration(iteration=0)
         route_roadblock_ids = scenario.get_route_roadblock_ids()
         
-        data.update(get_features(ego_state_buffer, observation_buffer, map_api, traffic_lights, route_roadblock_ids, max_agents=20))
+        data.update(get_features(ego_state_buffer, observation_buffer, map_api, traffic_lights, route_roadblock_ids, max_agents=64))
 
         if f"{scenario_type}-{scenario_name}.pt" in self.train_file_names:
             torch.save(data, os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed-{self.mode}-train-PlanR1", f"{scenario_type}-{scenario_name}.pt"))
@@ -184,5 +184,5 @@ class NuplanDataset(Dataset):
 if __name__ == '__main__':
     # NuplanDataset(root='../nuplan/dataset/', dir='train', split='train', mode='plan', num_total_scenarios=100000)
     # NuplanDataset(root='../nuplan/dataset/', dir='train', split='val', mode='plan', num_total_scenarios=100000)
-    NuplanDataset(root='../nuplan/dataset/', dir='train', split='train', mode='pred', num_total_scenarios=1000000)
-    NuplanDataset(root='../nuplan/dataset/', dir='train', split='val', mode='pred', num_total_scenarios=1000000)
+    NuplanDataset(root='/Dataset/nuplan', dir='mini', split='train', mode='pred', num_total_scenarios=10000, parallel=True)
+    # NuplanDataset(root='../nuplan/dataset/', dir='train', split='val', mode='pred', num_total_scenarios=1000000)
