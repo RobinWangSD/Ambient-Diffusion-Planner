@@ -59,6 +59,7 @@ class NuplanDataset(Dataset):
         self.map_path = os.path.join(self.root, 'maps')
         self.limit_total_scenarios = num_total_scenarios
         self.num_scenarios_per_type = num_scenarios_per_type
+        self.max_agents = max_agents
         
         self._raw_file_names = os.listdir(os.path.join(self.root, 'nuplan-v1.1', 'splits', self.dir))
 
