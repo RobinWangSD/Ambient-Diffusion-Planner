@@ -2,7 +2,7 @@ from argparse import ArgumentParser
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
-from pytorch_lightning.loggers import CSVLogger
+from pytorch_lightning.loggers import CSVLogger, WandbLogger
 
 from datamodules import NuplanDataModule
 from model import PlanR1
@@ -33,14 +33,28 @@ if __name__ == '__main__':
     datamodule = NuplanDataModule(**config['datamodule'])
     model_checkpoint = ModelCheckpoint(**config['trainer']['ckpt'])
     lr_monitor = LearningRateMonitor(**config['trainer']['lr_monitor'])
-    csv_logger = CSVLogger(**config['trainer']['csv_logger'])
+
+    use_wandb = config.get("use_wandb", True)
+    if use_wandb:
+        # wandb.login(key='caad08df59bfd0cb22f3613849ad66faeb65d4b0')
+        logger = WandbLogger(
+            name='plan_r1-64_agents',
+            project='ambient_diffusion_planner',
+            entity='luw015',
+            log_model=True,
+            dir=config['trainer']['csv_logger']['save_dir'],
+        )
+    else:
+        logger = CSVLogger(**config['trainer']['csv_logger'])
+        # csv_logger = CSVLogger(**config['trainer']['csv_logger'])
+
     trainer = pl.Trainer(
         strategy=config['trainer']['strategy'],
         devices=config['trainer']['devices'],
         accelerator=config['trainer']['accelerator'],
         callbacks=[model_checkpoint, lr_monitor],
         max_epochs=config['trainer']['max_epochs'],
-        logger=csv_logger
+        logger=logger,
     )
 
     trainer.fit(model, datamodule)

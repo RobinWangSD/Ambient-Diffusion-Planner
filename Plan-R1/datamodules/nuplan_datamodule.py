@@ -51,13 +51,13 @@ class NuplanDataModule(pl.LightningDataModule):
         self.train_transform = TokenBuilder(token_dict_path, self.interval, num_historical_steps, self.mode)
         self.val_transform = TokenBuilder(token_dict_path, self.interval, num_historical_steps, self.mode)
 
-    def prepare_data(self) -> None:
-        NuplanDataset(self.root, self.dir, 'train', self.mode, self.train_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
-        NuplanDataset(self.root, self.dir, 'val', self.mode, self.val_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
+    # def prepare_data(self) -> None:
+    #     NuplanDataset(self.root, self.dir, 'train', self.mode, self.train_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
+    #     NuplanDataset(self.root, 'val', 'val', self.mode, self.val_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
 
     def setup(self, stage: Optional[str] = None) -> None:
         self.train_dataset = NuplanDataset(self.root, self.dir, 'train', self.mode, self.train_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
-        self.val_dataset = NuplanDataset(self.root, self.dir, 'val', self.mode, self.val_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
+        self.val_dataset = NuplanDataset(self.root, 'val', 'val', self.mode, self.val_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.train_batch_size, shuffle=self.shuffle,

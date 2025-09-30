@@ -1,4 +1,5 @@
 import os
+from glob import glob
 from typing import Callable, List, Optional, Tuple, Union
 import random
 from joblib import Parallel, delayed
@@ -35,8 +36,13 @@ class NuplanDataset(Dataset):
                  parallel: bool=True) -> None:
 
         self.root = root
-        if dir in ['train', 'val', 'test', 'mini']:
+        if dir in ['val', 'test', 'mini']:
             self.dir = dir
+        elif dir == 'train':
+            self.dir = [
+                'train_boston', 'train_pittsburgh', 'train_singapore', 
+                'train_vegas_1', 'train_vegas_2', 'train_vegas_3', 'train_vegas_4', 'train_vegas_5', 'train_vegas_6'
+            ]
         else:
             raise ValueError(dir + ' is not valid')
         if split in ['train', 'val']:
@@ -51,35 +57,63 @@ class NuplanDataset(Dataset):
         self.map_path = os.path.join(self.root, 'maps')
         self.limit_total_scenarios = num_total_scenarios
         
-        self._raw_file_names = os.listdir(os.path.join(self.root, 'nuplan-v1.1', 'splits', self.dir))
-
-        self.processed_file_names_path = os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-{self.split}-PlanR1.pt")
-        if os.path.exists(self.processed_file_names_path):
-            self._processed_file_names = torch.load(self.processed_file_names_path)
-            print(f"Number of scenarios in {self.split} dataset: {len(self._processed_file_names)}")
-        else:
+        if type(self.dir) is list:
+            self._raw_file_names = []
             self._processed_file_names = []
-            scenario_mapping = ScenarioMapping(scenario_map=get_scenario_map(), subsample_ratio_override=0.5)
-            if self.mode == 'plan':
-                scenario_types = get_plan_scenario_types()
-                scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, scenario_types=scenario_types))
-            elif self.mode == 'pred':
-                scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios))
-            worker = SingleMachineParallelExecutor(use_process_pool=True)
-            builder = NuPlanScenarioBuilder(self.raw_paths, self.map_path, None, None, self.map_version, scenario_mapping=scenario_mapping)
-            scenarios = builder.get_scenarios(scenario_filter, worker)
-            print(f"Number of total scenarios: {len(scenarios)}")
-            for scenario in tqdm(scenarios):
-                scenario_type = scenario.scenario_type
-                scenario_name = scenario.scenario_name
-                self._processed_file_names.append(f"{scenario_type}-{scenario_name}.pt")
-            random.seed(42)
-            random.shuffle(self._processed_file_names)
-            torch.save(self._processed_file_names[:int(self.limit_total_scenarios*ratio)], os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-val-PlanR1.pt"))
-            torch.save(self._processed_file_names[int(self.limit_total_scenarios*ratio):], os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-train-PlanR1.pt"))
-            worker._executor.shutdown(wait=True)
+            self._processed_paths = []
+            # self.processed_file_names_paths = []
+            for dir_name in self.dir:
+                self._raw_file_names += os.listdir(os.path.join(self.root, 'nuplan-v1.1', 'splits', dir_name))
+                # self.processed_file_names_paths.append(
+                #     os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{dir_name}-processed_file_names-{self.mode}-PlanR1.pt")
+                # )
+                processed_file_names_path = os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{dir_name}-processed_file_names-{self.mode}-PlanR1.pt")
+                if os.path.exists(processed_file_names_path):
+                    _processed_file_names = torch.load(processed_file_names_path)
+                    print(f"Number of scenarios in {dir_name} dataset: {len(_processed_file_names)}")
+                    self._processed_file_names += _processed_file_names
 
-        self._processed_paths = [os.path.join(self.processed_dir, name) for name in self.processed_file_names]
+                    _processed_paths = [
+                        os.path.join(
+                            os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{dir_name}-processed-{self.mode}-PlanR1"), 
+                            name) for name in _processed_file_names
+                        ]
+                    self._processed_paths += _processed_paths
+            print(f"Total number of scenarios in {self.mode} dataset: {len(self._processed_file_names)}")
+        else:
+            self._raw_file_names = os.listdir(os.path.join(self.root, 'nuplan-v1.1', 'splits', self.dir))
+            self.processed_file_names_path = os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt")
+        
+            if os.path.exists(self.processed_file_names_path):
+                self._processed_file_names = torch.load(self.processed_file_names_path)
+                print(f"Number of scenarios in {self.split} dataset: {len(self._processed_file_names)}")
+            
+            self._processed_paths = [os.path.join(self.processed_dir, name) for name in self.processed_file_names]
+        
+        # should preprocess before training. see preprocess_dataset.py
+        # else:
+        #     self._processed_file_names = []
+        #     scenario_mapping = ScenarioMapping(scenario_map=get_scenario_map(), subsample_ratio_override=0.5)
+        #     if self.mode == 'plan':
+        #         scenario_types = get_plan_scenario_types()
+        #         scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, scenario_types=scenario_types))
+        #     elif self.mode == 'pred':
+        #         scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios))
+        #     worker = SingleMachineParallelExecutor(use_process_pool=True)
+        #     builder = NuPlanScenarioBuilder(self.raw_paths, self.map_path, None, None, self.map_version, scenario_mapping=scenario_mapping)
+        #     scenarios = builder.get_scenarios(scenario_filter, worker)
+        #     print(f"Number of total scenarios: {len(scenarios)}")
+        #     for scenario in tqdm(scenarios):
+        #         scenario_type = scenario.scenario_type
+        #         scenario_name = scenario.scenario_name
+        #         self._processed_file_names.append(f"{scenario_type}-{scenario_name}.pt")
+        #     random.seed(42)
+        #     random.shuffle(self._processed_file_names)
+        #     torch.save(self._processed_file_names[:int(self.limit_total_scenarios*ratio)], os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-val-PlanR1.pt"))
+        #     torch.save(self._processed_file_names[int(self.limit_total_scenarios*ratio):], os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-train-PlanR1.pt"))
+        #     worker._executor.shutdown(wait=True)
+
+        # self._processed_paths = [os.path.join(self.processed_dir, name) for name in self.processed_file_names]
         
         self.num_samples_per_second = num_samples_per_second
         self.historical_horizon = historical_horizon
@@ -96,7 +130,7 @@ class NuplanDataset(Dataset):
 
     @property
     def processed_dir(self) -> str:
-        return os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed-{self.mode}-{self.split}-PlanR1")
+        return os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed-{self.mode}-PlanR1")
     
     @property
     def raw_file_names(self) -> Union[str, List[str], Tuple]:
@@ -110,31 +144,33 @@ class NuplanDataset(Dataset):
     def processed_paths(self) -> List[str]:
         return self._processed_paths
 
-    def process(self) -> None:
-        scenario_mapping = ScenarioMapping(scenario_map=get_scenario_map(), subsample_ratio_override=0.5)
-        if self.mode == 'plan':
-            scenario_types = get_plan_scenario_types()
-            scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, scenario_types=scenario_types))
-        elif self.mode == 'pred':
-            scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios))
-        worker = SingleMachineParallelExecutor(use_process_pool=True)
-        builder = NuPlanScenarioBuilder(self.raw_paths, self.map_path, None, None, self.map_version, scenario_mapping=scenario_mapping)
-        scenarios = builder.get_scenarios(scenario_filter, worker)
+    # def process(self) -> None:
+    #     assert False, 'preprocessing should be outside training loops'
 
-        os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed-{self.mode}-train-PlanR1"), exist_ok=True)
-        os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed-{self.mode}-val-PlanR1"), exist_ok=True)
-        self.train_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-train-PlanR1.pt"))
-        self.val_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-val-PlanR1.pt"))
+    #     scenario_mapping = ScenarioMapping(scenario_map=get_scenario_map(), subsample_ratio_override=0.5)
+    #     if self.mode == 'plan':
+    #         scenario_types = get_plan_scenario_types()
+    #         scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, scenario_types=scenario_types))
+    #     elif self.mode == 'pred':
+    #         scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios))
+    #     worker = SingleMachineParallelExecutor(use_process_pool=True)
+    #     builder = NuPlanScenarioBuilder(self.raw_paths, self.map_path, None, None, self.map_version, scenario_mapping=scenario_mapping)
+    #     scenarios = builder.get_scenarios(scenario_filter, worker)
+
+    #     os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed-{self.mode}-train-PlanR1"), exist_ok=True)
+    #     os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed-{self.mode}-val-PlanR1"), exist_ok=True)
+    #     self.train_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-train-PlanR1.pt"))
+    #     self.val_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-val-PlanR1.pt"))
                 
-        if self.parallel:
-            batch_size = 50
-            process_map(self.process_batch_scenario, 
-                        [scenarios[i:i+batch_size] for i in range(0, len(scenarios), batch_size)],
-                        max_workers=100, 
-                        chunksize=1)
-        else:
-            for scenario in tqdm(scenarios):
-                self.process_single_scenario(scenario)
+    #     if self.parallel:
+    #         batch_size = 50
+    #         process_map(self.process_batch_scenario, 
+    #                     [scenarios[i:i+batch_size] for i in range(0, len(scenarios), batch_size)],
+    #                     max_workers=100, 
+    #                     chunksize=1)
+    #     else:
+    #         for scenario in tqdm(scenarios):
+    #             self.process_single_scenario(scenario)
 
     def process_batch_scenario(self, batch: List[NuPlanScenario]) -> None:
         """

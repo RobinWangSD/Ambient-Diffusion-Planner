@@ -45,7 +45,7 @@ dependencies = [
     "waymo-open-dataset-tf-2-11-0",
     "pandas (==1.5.3)",
     "array-record (==0.5.1)",
-    "torch-geometric (==2.6.1)",
+    "torch-geometric (==2.3.1)",
     "torch-cluster (==1.6.3)",
     "torch-scatter (==2.1.2)",
     "torchmetrics (==1.6.0)",

@@ -123,7 +123,7 @@ class Backbone(nn.Module):
         k2k_a_valid_mask = data['agent']['recon_valid_mask'].transpose(0, 1)                #[T, (N1,...,Nb)]
         k2k_a_valid_mask = k2k_a_valid_mask.unsqueeze(2) & k2k_a_valid_mask.unsqueeze(1)    #[T, (N1,...,Nb), (N1,...,Nb)]
         k2k_a_valid_mask = drop_edge_between_samples(k2k_a_valid_mask, batch=data['agent']['batch'])    #[T, (N1,...,Nb), (N1,...,Nb)]
-        k2k_a_edge_index = dense_to_sparse(k2k_a_valid_mask)[0]
+        k2k_a_edge_index = dense_to_sparse(k2k_a_valid_mask.contiguous())[0]
         k2k_a_edge_index = k2k_a_edge_index[:, torch.norm(k2k_a_position[k2k_a_edge_index[0]] - k2k_a_position[k2k_a_edge_index[1]], p=2, dim=-1) < self.agent_radius]
         k2k_a_edge_vector = transform_point_to_local_coordinate(k2k_a_position[k2k_a_edge_index[0]], k2k_a_position[k2k_a_edge_index[1]], k2k_a_heading[k2k_a_edge_index[1]])
         k2k_a_edge_attr_length, k2k_a_edge_attr_theta = compute_angles_lengths_2D(k2k_a_edge_vector)
