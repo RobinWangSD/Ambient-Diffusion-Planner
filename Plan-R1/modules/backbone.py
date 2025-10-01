@@ -90,8 +90,10 @@ class Backbone(nn.Module):
         k2k_t_valid_mask = data['agent']['recon_valid_mask'].clone()        #[(N1,...,Nb),T]
         k2k_t_valid_mask = k2k_t_valid_mask.unsqueeze(2) & k2k_t_valid_mask.unsqueeze(1)  #[(N1,...,Nb),T,T]
         k2k_t_edge_index = dense_to_sparse(k2k_t_valid_mask)[0]
+        # teacher forcing 
         k2k_t_edge_index = k2k_t_edge_index[:, k2k_t_edge_index[0] <= k2k_t_edge_index[1]]
         k2k_t_edge_index = k2k_t_edge_index[:, k2k_t_edge_index[1] - k2k_t_edge_index[0] <= 6]
+        
         k2k_t_edge_vector = transform_point_to_local_coordinate(k2k_t_position[k2k_t_edge_index[0]], k2k_t_position[k2k_t_edge_index[1]], k2k_t_heading[k2k_t_edge_index[1]])
         k2k_t_edge_attr_length, k2k_t_edge_attr_theta = compute_angles_lengths_2D(k2k_t_edge_vector)
         k2k_t_edge_attr_heading = wrap_angle(k2k_t_heading[k2k_t_edge_index[0]] - k2k_t_heading[k2k_t_edge_index[1]])

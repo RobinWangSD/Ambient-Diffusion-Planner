@@ -24,45 +24,45 @@ class TokenBuilder(BaseTransform):
 
     def __call__(self, data):
         # load data
-        position = data['agent']['position']
-        heading = data['agent']['heading']
-        velocity = data['agent']['velocity']
-        visible_mask = data['agent']['visible_mask']
-        type = data['agent']['type']
+        position = data['agent']['position']    # (A, T=101, (x,y))
+        heading = data['agent']['heading']      # (A, T)
+        velocity = data['agent']['velocity']    # (A, T, (vx, vy))
+        visible_mask = data['agent']['visible_mask']    # (A, T)
+        type = data['agent']['type']            # (A,)
 
         # process data to ensure one valid token at current step
-        interplote_mask = visible_mask[:, self.num_historical_steps] & (~visible_mask[:, self.num_historical_steps - self.interval])
-        interplote_position = position[:, self.num_historical_steps] - velocity[:, self.num_historical_steps] * (0.1*self.interval)
-        interplote_heading = heading[:, self.num_historical_steps]
+        interplote_mask = visible_mask[:, self.num_historical_steps] & (~visible_mask[:, self.num_historical_steps - self.interval])    # (A,)
+        interplote_position = position[:, self.num_historical_steps] - velocity[:, self.num_historical_steps] * (0.1*self.interval)     # (A, 2)
+        interplote_heading = heading[:, self.num_historical_steps]      # (A,)
         position[:, self.num_historical_steps - self.interval] = torch.where(interplote_mask.unsqueeze(1), interplote_position, position[:, self.num_historical_steps - self.interval])
         heading[:, self.num_historical_steps - self.interval] = torch.where(interplote_mask, interplote_heading, heading[:, self.num_historical_steps - self.interval])
         visible_mask[:, self.num_historical_steps - self.interval] = torch.where(interplote_mask, interplote_mask, visible_mask[:, self.num_historical_steps - self.interval])
-        position = position[:,::self.interval]
-        heading = heading[:,::self.interval]
-        visible_mask = visible_mask[:,::self.interval]
+        position = position[:,::self.interval]  # (A, T_chunk=21, 2)
+        heading = heading[:,::self.interval]    # (A, T_chunk)
+        visible_mask = visible_mask[:,::self.interval]  # (A, T_chunk)
         
         # generate tokens
-        recon_token = torch.zeros((position.shape[0], position.shape[1] - 1), dtype=torch.long)
-        recon_token_mask = torch.zeros((position.shape[0], position.shape[1] - 1), dtype=torch.bool)
-        recon_position = torch.zeros((position.shape[0], position.shape[1], 2), dtype=torch.float)
-        recon_heading = torch.zeros((position.shape[0], position.shape[1]), dtype=torch.float)
-        recon_valid_mask = torch.zeros((position.shape[0], position.shape[1]), dtype=torch.bool)
+        recon_token = torch.zeros((position.shape[0], position.shape[1] - 1), dtype=torch.long)         # (A, T_chunk-1=20)
+        recon_token_mask = torch.zeros((position.shape[0], position.shape[1] - 1), dtype=torch.bool)    # (A, 20)
+        recon_position = torch.zeros((position.shape[0], position.shape[1], 2), dtype=torch.float)      # (A, 21, 2)
+        recon_heading = torch.zeros((position.shape[0], position.shape[1]), dtype=torch.float)          # (A, 21)
+        recon_valid_mask = torch.zeros((position.shape[0], position.shape[1]), dtype=torch.bool)        # (A, 21)
 
         recon_position[:, 0] = position[:, 0]
         recon_heading[:, 0] = heading[:, 0]
         recon_valid_mask[:, 0] = visible_mask[:, 0]
 
         for step in range(0, position.shape[1] - 1):
-            relative_position = transform_point_to_local_coordinate(position[:, step + 1], recon_position[:, step], recon_heading[:, step])
-            relative_heading = wrap_angle(heading[:, step + 1] - recon_heading[:, step])
-            relative_valid_mask = visible_mask[:, step + 1] & visible_mask[:, step]
+            relative_position = transform_point_to_local_coordinate(position[:, step + 1], recon_position[:, step], recon_heading[:, step]) # (A, 2)
+            relative_heading = wrap_angle(heading[:, step + 1] - recon_heading[:, step])    # (A,)
+            relative_valid_mask = visible_mask[:, step + 1] & visible_mask[:, step]         # (A,)
 
             for i in type.unique().tolist():
                 mask = type == i
                 relative_position_i = relative_position[mask]
                 relative_heading_i = relative_heading[mask]
                 relative_valid_mask_i = relative_valid_mask[mask]
-                tokens_i = self.tokens[Type[i]]
+                tokens_i = self.tokens[Type[i]]     # (1024, 3)
                 tokens_to_points_corner_distance = compute_average_corner_distance(tokens_i[:, :2], tokens_i[:, 2], relative_position_i, relative_heading_i)
                 target = torch.argmin(tokens_to_points_corner_distance, dim=0)
 
