@@ -2,6 +2,7 @@ import os
 from typing import Callable, List, Optional, Tuple, Union
 import random
 import torch
+import pickle
 from torch_geometric.data import Dataset
 from torch_geometric.data import HeteroData
 from tqdm import tqdm
@@ -55,6 +56,11 @@ class NuplanDataset(Dataset):
         if mode not in ['pred', 'plan']:
             raise ValueError(mode + ' is not valid')
         
+        with open('/data/temp/Expire180Days/automlops-fraprd/long-retention/diffusion_planner/trainval_batch/dataset_splits/dataset_20m_path_mapping.pkl', 'rb') as f:
+            dataset_path_mapping = pickle.load(f)
+        self.data_list = list(dataset_path_mapping.keys())
+        print('dataset path mapping loaded')
+
         self.map_version = "nuplan-maps-v1.0"
         self.map_path = os.path.join(self.root, 'maps')
         self.limit_total_scenarios = num_total_scenarios
@@ -75,20 +81,21 @@ class NuplanDataset(Dataset):
                 scenario_types = get_plan_scenario_types()
                 scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, scenario_types=scenario_types))
             elif self.mode == 'pred':
-                scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, num_scenarios_per_type=self.num_scenarios_per_type))
+                # scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, num_scenarios_per_type=self.num_scenarios_per_type))
+                scenario_filter = ScenarioFilter(*get_filter_parameters())
             worker = SingleMachineParallelExecutor(use_process_pool=True)
             builder = NuPlanScenarioBuilder(self.raw_paths, self.map_path, None, None, self.map_version, scenario_mapping=scenario_mapping)
             scenarios = builder.get_scenarios(scenario_filter, worker)
             print(f"Number of total scenarios: {len(scenarios)}")
-            filtered_scenarios = []
-            for scenario in tqdm(scenarios):
-                scenario_type = scenario.scenario_type
-                scenario_name = scenario.scenario_name
-                token = scenario.token
-                map_name = scenario._map_name
-                if f'{map_name}_{token}.npz' in data_list:
-                    filtered_scenarios.append(scenarios)
-                    self._processed_file_names.append(f"{scenario_type}-{scenario_name}.pt")
+            # filtered_scenarios = []
+            # for scenario in tqdm(scenarios):
+            #     scenario_type = scenario.scenario_type
+            #     scenario_name = scenario.scenario_name
+            #     token = scenario.token
+            #     map_name = scenario._map_name
+            #     if f'{map_name}_{token}.npz' in data_list:
+            #         filtered_scenarios.append(scenarios)
+            #         self._processed_file_names.append(f"{scenario_type}-{scenario_name}.pt")
             # random.seed(42)
             # random.shuffle(self._processed_file_names)
             # torch.save(self._processed_file_names[:int(self.limit_total_scenarios*ratio)], os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-val-PlanR1.pt"))
@@ -96,7 +103,7 @@ class NuplanDataset(Dataset):
             # torch.save(self._processed_file_names, os.path.join(self.root, 'nuplan-v1.1', 'splits', f"{self.dir}-processed_file_names-{self.mode}-{self.split}-PlanR1.pt"))
             
             os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'processed'), exist_ok=True)
-            torch.save(self._processed_file_names, os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt"))
+            # torch.save(self._processed_file_names, os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt"))
             # worker._executor.shutdown(wait=True)
 
         self._processed_paths = [os.path.join(self.processed_dir, name) for name in self.processed_file_names]
@@ -118,8 +125,8 @@ class NuplanDataset(Dataset):
         else:
             for scenario in tqdm(scenarios):
                 self.process_single_scenario(scenario)
-
-        # super(NuplanDataset, self).__init__(root=root, transform=transform)
+        # torch.save(self._processed_file_names, os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt"))   
+        super(NuplanDataset, self).__init__(root=root, transform=transform)
 
     @property
     def raw_dir(self) -> str:
@@ -141,37 +148,37 @@ class NuplanDataset(Dataset):
     def processed_paths(self) -> List[str]:
         return self._processed_paths
 
-    def process(self) -> None:
-        scenario_mapping = ScenarioMapping(scenario_map=get_scenario_map(), subsample_ratio_override=0.5)
-        if self.mode == 'plan':
-            scenario_types = get_plan_scenario_types()
-            scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, scenario_types=scenario_types))
-        elif self.mode == 'pred':
-            scenario_filter = ScenarioFilter(
-                *get_filter_parameters(
-                    limit_total_scenarios=self.limit_total_scenarios,
-                    num_scenarios_per_type=self.num_scenarios_per_type,
-                    )
-                )
-        worker = SingleMachineParallelExecutor(use_process_pool=True)
-        builder = NuPlanScenarioBuilder(self.raw_paths, self.map_path, None, None, self.map_version, scenario_mapping=scenario_mapping)
-        scenarios = builder.get_scenarios(scenario_filter, worker)
+    # def process(self) -> None:
+    #     scenario_mapping = ScenarioMapping(scenario_map=get_scenario_map(), subsample_ratio_override=0.5)
+    #     if self.mode == 'plan':
+    #         scenario_types = get_plan_scenario_types()
+    #         scenario_filter = ScenarioFilter(*get_filter_parameters(limit_total_scenarios=self.limit_total_scenarios, scenario_types=scenario_types))
+    #     elif self.mode == 'pred':
+    #         scenario_filter = ScenarioFilter(
+    #             *get_filter_parameters(
+    #                 limit_total_scenarios=self.limit_total_scenarios,
+    #                 num_scenarios_per_type=self.num_scenarios_per_type,
+    #                 )
+    #             )
+    #     worker = SingleMachineParallelExecutor(use_process_pool=True)
+    #     builder = NuPlanScenarioBuilder(self.raw_paths, self.map_path, None, None, self.map_version, scenario_mapping=scenario_mapping)
+    #     scenarios = builder.get_scenarios(scenario_filter, worker)
 
-        # os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed-{self.mode}-train-PlanR1"), exist_ok=True)
-        # os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed-{self.mode}-val-PlanR1"), exist_ok=True)
-        os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed-{self.mode}-PlanR1"), exist_ok=True)
-        self.train_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt"))
-        self.val_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt"))
+    #     # os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed-{self.mode}-train-PlanR1"), exist_ok=True)
+    #     # os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed-{self.mode}-val-PlanR1"), exist_ok=True)
+    #     os.makedirs(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed-{self.mode}-PlanR1"), exist_ok=True)
+    #     self.train_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt"))
+    #     self.val_file_names = torch.load(os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt"))
                 
-        if self.parallel:
-            batch_size = 24
-            process_map(self.process_batch_scenario, 
-                        [scenarios[i:i+batch_size] for i in range(0, len(scenarios), batch_size)],
-                        max_workers=24, 
-                        chunksize=1)
-        else:
-            for scenario in tqdm(scenarios):
-                self.process_single_scenario(scenario)
+    #     if self.parallel:
+    #         batch_size = 24
+    #         process_map(self.process_batch_scenario, 
+    #                     [scenarios[i:i+batch_size] for i in range(0, len(scenarios), batch_size)],
+    #                     max_workers=24, 
+    #                     chunksize=1)
+    #     else:
+    #         for scenario in tqdm(scenarios):
+    #             self.process_single_scenario(scenario)
 
     def process_batch_scenario(self, batch: List[NuPlanScenario]) -> None:
         """
@@ -183,6 +190,10 @@ class NuplanDataset(Dataset):
     def process_single_scenario(self, scenario: NuPlanScenario) -> None:
         scenario_type = scenario.scenario_type
         scenario_name = scenario.scenario_name
+        token = scenario.token
+        map_name = scenario._map_name
+        if f'{map_name}_{token}.npz' not in self.data_list:
+            return
 
         data = dict()
         data['log_name'] = scenario.log_name
