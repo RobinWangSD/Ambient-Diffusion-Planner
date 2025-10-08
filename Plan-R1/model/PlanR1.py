@@ -194,6 +194,27 @@ class PlanR1(pl.LightningModule):
 
         return data, position, heading, valid_mask
 
+    def inpaint_inference(self, data: Batch):
+        map_encoder = self.pred_map_encoder
+        backbone = self.pred_backbone
+        decoder_head = self.pred_decoder_head
+
+        polygon_embs = map_encoder(data=data)
+        agent_embs, k_embs_dict = backbone.pre_inference(data=data)
+
+        for _ in range(self.num_future_intervals):
+            k_embs_dict, k_embs_step = backbone.inference(data=data, g_embs=polygon_embs, a_embs=agent_embs, k_embs_dict=k_embs_dict)
+            logits_step = decoder_head(k_embs_step)
+            action_step = sample_with_top_k_top_p(logits_step.unsqueeze(1), top_k=self.pred_top_k).squeeze(1).squeeze(1)
+
+            data = self.inpaint(data, action_step)
+
+        position = data['agent']['infer_position'][:, self.num_historical_intervals:]
+        heading = data['agent']['infer_heading'][:, self.num_historical_intervals:]
+        valid_mask = data['agent']['infer_valid_mask'][:, self.num_historical_intervals:]
+
+        return data, position, heading, valid_mask
+
     def plan_inference(self, data: Batch):
         ego_index = data['agent']['ptr'][:-1]
 
@@ -245,6 +266,22 @@ class PlanR1(pl.LightningModule):
             self.reward.update(rewards)
             self.log('val_reward', self.reward, prog_bar=True, on_step=False, on_epoch=True)
 
+        elif self.mode == 'inpaint':
+            # # pred token and reward
+            # polygon_embs = self.pred_map_encoder(data=data) 
+            # feat = self.pred_backbone(data=data, g_embs=polygon_embs)
+            # logits = self.pred_decoder_head(feat)
+            # # compute loss
+            # target = data['agent']['recon_token'].roll(-1,1)
+            # target_mask = data['agent']['recon_token_mask'].roll(-1,1)
+            # target_mask[:, -1] = 0
+            # cls_loss = self.cls_loss(logits[target_mask], target[target_mask])
+            # self.log('val_token_cls_acc', self.token_cls_acc(logits[target_mask], target[target_mask]), prog_bar=True, on_step=False, on_epoch=True, batch_size=1, sync_dist=True)
+            # self.log('val_cls_loss', cls_loss, prog_bar=True, on_step=False, on_epoch=True, batch_size=1, sync_dist=True)
+            # # inference
+            # inpaint
+            _, position, heading, valid_mask = self.inpaint_inference(data)
+
         agent_batch = data['agent']['batch']
         agent_pred_traj = unbatch(position.unsqueeze(1), agent_batch)
         agent_target_traj = unbatch(data['agent']['position'][:, self.num_historical_steps+self.interval::self.interval], agent_batch)
@@ -256,7 +293,11 @@ class PlanR1(pl.LightningModule):
         self.log('val_min_joint_fde', self.min_joint_fde, prog_bar=True, on_step=False, on_epoch=True)
 
         if self.val_visualization:
-            visualization(data, position)
+            if self.mode == 'inpaint':
+                visualization(data, position, title='inpainting')
+                visualization(data, data['agent']['recon_position'], title='gt')
+            elif self.mode == 'pred':
+                visualization(data, position, title='val')
 
     def freeze_pred_model(self):
         # eval mode
@@ -280,6 +321,38 @@ class PlanR1(pl.LightningModule):
 
     def transition(self, data, action):
         next_data = data.clone()
+
+        next_data['agent']['infer_token'] = torch.cat([next_data['agent']['infer_token'], action.unsqueeze(1)], dim=1)
+        next_data['agent']['infer_token_mask'] = torch.cat([next_data['agent']['infer_token_mask'], next_data['agent']['infer_token_mask'][:, -1:]], dim=1)
+
+        a_type = data['agent']['type']
+        vehicle_mask = a_type == 0
+        pedestrian_mask = a_type == 1
+        bicycle_mask = a_type == 2
+
+        token = torch.zeros(action.size(0), 3, device=action.device)
+        self.token_dict = move_dict_to_device(self.token_dict, action.device)
+        token[vehicle_mask] = self.token_dict['Vehicle'][action[vehicle_mask]]
+        token[pedestrian_mask] = self.token_dict['Pedestrian'][action[pedestrian_mask]]
+        token[bicycle_mask] = self.token_dict['Bicycle'][action[bicycle_mask]]
+        token_position = transform_point_to_global_coordinate(token[:, :2], next_data['agent']['infer_position'][:, -1], next_data['agent']['infer_heading'][:, -1])
+        token_heading = wrap_angle(token[:, 2] + next_data['agent']['infer_heading'][:, -1])
+
+        next_data['agent']['infer_position'] = torch.cat([next_data['agent']['infer_position'], token_position.unsqueeze(1)], dim=1)
+        next_data['agent']['infer_heading'] = torch.cat([next_data['agent']['infer_heading'], token_heading.unsqueeze(1)], dim=1)
+        next_data['agent']['infer_valid_mask'] = torch.cat([next_data['agent']['infer_valid_mask'], next_data['agent']['infer_valid_mask'][:, -1:]], dim=1)
+
+        return next_data
+
+    def inpaint(self, data, action):
+        next_data = data.clone()
+
+        num_node, num_steps = next_data['agent']['infer_token'].shape
+
+        idx = num_steps
+        token_mask = next_data['agent']['recon_token_mask'][:, idx]
+        gt_tokens = next_data['agent']['recon_token'][:, idx]
+        action[token_mask] = gt_tokens[token_mask]
 
         next_data['agent']['infer_token'] = torch.cat([next_data['agent']['infer_token'], action.unsqueeze(1)], dim=1)
         next_data['agent']['infer_token_mask'] = torch.cat([next_data['agent']['infer_token_mask'], next_data['agent']['infer_token_mask'][:, -1:]], dim=1)

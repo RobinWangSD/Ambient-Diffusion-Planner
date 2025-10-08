@@ -6,7 +6,13 @@ from torch_geometric.data import Batch
 
 from utils import compute_corner_positions
 
-def visualization(data:Batch, pred_position:torch.tensor=None, iteration:int=None, num_historical_steps:int=20) -> None:
+def visualization(
+    data:Batch, 
+    pred_position:torch.tensor=None, 
+    iteration:int=None, 
+    num_historical_steps:int=20,
+    title:str='inpainting',
+    ) -> None:
     batch_size = len(data['agent']['ptr']) - 1
 
     agent_batch = data['agent']['batch']
@@ -132,5 +138,5 @@ def visualization(data:Batch, pred_position:torch.tensor=None, iteration:int=Non
             plt.savefig(f'visualization/results/{iteration}.png', bbox_inches='tight', pad_inches=0)
         else:
             # plt.savefig(f'visualization/results/{data["scenario_name"][i]}.png', bbox_inches='tight', pad_inches=0)
-            plt.savefig(f'visualization/results/{data["scenario_name"][i]}_{i}.png', bbox_inches='tight', pad_inches=0)
+            plt.savefig(f'visualization/results/{data["scenario_name"][i]}_{i}_{title}.png', bbox_inches='tight', pad_inches=0)
         plt.close()

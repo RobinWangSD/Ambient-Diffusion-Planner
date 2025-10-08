@@ -1,5 +1,5 @@
 univeral_config: &univeral_config
-  mode: "pred"
+  mode: "inpaint"
   data_mode: "pred"
   token_dict_path: /robin-west/Ambient-Diffusion-Planner/Plan-R1/tokens/tokens_1024.pt
   num_tokens: 1024

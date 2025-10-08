@@ -29,7 +29,7 @@ if __name__ == '__main__':
     dataset = NuplanDataset(config['dataset']['root'], 
                             config['dataset']['dir'], 
                             'val', 
-                            config['dataset']['mode'],
+                            config['dataset']['data_mode'],
                             transform=TokenBuilder(config['dataset']['token_dict_path'], 
                                                    config['dataset']['interval'], 
                                                    config['dataset']['num_historical_steps'], 
