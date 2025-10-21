@@ -1,0 +1,17 @@
+{"time":"2025-10-02T08:40:16.51478158Z","level":"INFO","msg":"stream: starting","core version":"0.20.1","symlink path":"wandb/run-20251002_084015-dyxghdiy/logs/debug-core.log"}
+{"time":"2025-10-02T08:40:16.890367043Z","level":"INFO","msg":"stream: created new stream","id":"dyxghdiy"}
+{"time":"2025-10-02T08:40:16.890403216Z","level":"INFO","msg":"stream: started","id":"dyxghdiy"}
+{"time":"2025-10-02T08:40:16.890435644Z","level":"INFO","msg":"handler: started","stream_id":"dyxghdiy"}
+{"time":"2025-10-02T08:40:16.890434043Z","level":"INFO","msg":"writer: Do: started","stream_id":"dyxghdiy"}
+{"time":"2025-10-02T08:40:16.89046779Z","level":"INFO","msg":"sender: started","stream_id":"dyxghdiy"}
+{"time":"2025-10-02T08:40:17.299824355Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-10-02T19:08:51.93229725Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T19:09:51.912561504Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T19:13:06.937521914Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T19:13:13.655233382Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T19:13:22.753804562Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T19:13:36.035379439Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T21:09:36.91368364Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T21:09:51.927274663Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T21:10:51.911453481Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
+{"time":"2025-10-02T21:12:06.93380482Z","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/files/luw015/ambient_diffusion_planner/dyxghdiy/file_stream\": dial tcp: lookup api.wandb.ai on 10.96.0.10:53: server misbehaving"}
