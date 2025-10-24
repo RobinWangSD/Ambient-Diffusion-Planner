@@ -1,0 +1,101 @@
+import torch
+from torch_geometric.transforms import BaseTransform
+
+from utils import transform_point_to_local_coordinate
+from utils import transform_point_to_global_coordinate
+from utils import wrap_angle
+from utils import compute_average_corner_distance
+
+Type = {
+    0: 'Vehicle', 
+    1: 'Pedestrian', 
+    2: 'Bicycle'
+}
+
+class TargetBuilder(BaseTransform):
+    def __init__(
+        self, 
+        num_historical_steps: int = 20,
+        num_future_steps: int = 80, 
+        ):
+        super(TargetBuilder, self).__init__()
+        self.num_historical_steps = num_historical_steps
+        self.num_future_steps = num_future_steps
+
+    def __call__(self, data):
+        # load data
+        position = data['agent']['position']    # (A, T=101, (x,y))
+        heading = data['agent']['heading']      # (A, T)
+        velocity = data['agent']['velocity']    # (A, T, (vx, vy))
+        visible_mask = data['agent']['visible_mask']    # (A, T)
+        type = data['agent']['type']            # (A,)
+
+        origin = position[:, self.num_historical_steps]
+        theta = heading[:, self.num_historical_steps]
+        cos, sin = theta.cos(), theta.sin()
+        
+
+    # def __call__(self, data):
+    #     # load data
+    #     position = data['agent']['position']    # (A, T=101, (x,y))
+    #     heading = data['agent']['heading']      # (A, T)
+    #     velocity = data['agent']['velocity']    # (A, T, (vx, vy))
+    #     visible_mask = data['agent']['visible_mask']    # (A, T)
+    #     type = data['agent']['type']            # (A,)
+
+    #     # process data to ensure one valid token at current step
+    #     interplote_mask = visible_mask[:, self.num_historical_steps] & (~visible_mask[:, self.num_historical_steps - self.interval])    # (A,)
+    #     interplote_position = position[:, self.num_historical_steps] - velocity[:, self.num_historical_steps] * (0.1*self.interval)     # (A, 2)
+    #     interplote_heading = heading[:, self.num_historical_steps]      # (A,)
+    #     position[:, self.num_historical_steps - self.interval] = torch.where(interplote_mask.unsqueeze(1), interplote_position, position[:, self.num_historical_steps - self.interval])
+    #     heading[:, self.num_historical_steps - self.interval] = torch.where(interplote_mask, interplote_heading, heading[:, self.num_historical_steps - self.interval])
+    #     visible_mask[:, self.num_historical_steps - self.interval] = torch.where(interplote_mask, interplote_mask, visible_mask[:, self.num_historical_steps - self.interval])
+    #     position = position[:,::self.interval]  # (A, T_chunk=21, 2)
+    #     heading = heading[:,::self.interval]    # (A, T_chunk)
+    #     visible_mask = visible_mask[:,::self.interval]  # (A, T_chunk)
+        
+    #     # generate tokens
+    #     recon_token = torch.zeros((position.shape[0], position.shape[1] - 1), dtype=torch.long)         # (A, T_chunk-1=20)
+    #     recon_token_mask = torch.zeros((position.shape[0], position.shape[1] - 1), dtype=torch.bool)    # (A, 20)
+    #     recon_position = torch.zeros((position.shape[0], position.shape[1], 2), dtype=torch.float)      # (A, 21, 2)
+    #     recon_heading = torch.zeros((position.shape[0], position.shape[1]), dtype=torch.float)          # (A, 21)
+    #     recon_valid_mask = torch.zeros((position.shape[0], position.shape[1]), dtype=torch.bool)        # (A, 21)
+
+    #     recon_position[:, 0] = position[:, 0]
+    #     recon_heading[:, 0] = heading[:, 0]
+    #     recon_valid_mask[:, 0] = visible_mask[:, 0]
+
+    #     for step in range(0, position.shape[1] - 1):
+    #         relative_position = transform_point_to_local_coordinate(position[:, step + 1], recon_position[:, step], recon_heading[:, step]) # (A, 2)
+    #         relative_heading = wrap_angle(heading[:, step + 1] - recon_heading[:, step])    # (A,)
+    #         relative_valid_mask = visible_mask[:, step + 1] & visible_mask[:, step]         # (A,)
+
+    #         for i in type.unique().tolist():
+    #             mask = type == i
+    #             relative_position_i = relative_position[mask]
+    #             relative_heading_i = relative_heading[mask]
+    #             relative_valid_mask_i = relative_valid_mask[mask]
+    #             tokens_i = self.tokens[Type[i]]     # (1024, 3)
+    #             tokens_to_points_corner_distance = compute_average_corner_distance(tokens_i[:, :2], tokens_i[:, 2], relative_position_i, relative_heading_i)
+    #             target = torch.argmin(tokens_to_points_corner_distance, dim=0)
+
+    #             recon_token[mask, step] = target
+    #             recon_token_mask[mask, step] = relative_valid_mask_i
+
+    #             recon_position[mask, step + 1] = torch.where(relative_valid_mask_i.unsqueeze(1), transform_point_to_global_coordinate(tokens_i[target, :2], recon_position[mask, step], recon_heading[mask, step]), position[mask, step + 1])
+    #             recon_heading[mask, step + 1] = torch.where(relative_valid_mask_i, wrap_angle(tokens_i[target, 2] + recon_heading[mask, step]), heading[mask, step + 1])
+    #             recon_valid_mask[mask, step + 1] = torch.where(relative_valid_mask_i, relative_valid_mask_i, visible_mask[mask, step + 1])
+
+    #     data['agent']['recon_token'] = recon_token
+    #     data['agent']['recon_token_mask'] = recon_token_mask
+    #     data['agent']['recon_position'] = recon_position[:, 1:]
+    #     data['agent']['recon_heading'] = recon_heading[:, 1:]
+    #     data['agent']['recon_valid_mask'] = recon_valid_mask[:, 1:]
+
+    #     data['agent']['infer_token'] = recon_token[:, :self.num_historical_steps // self.interval]
+    #     data['agent']['infer_token_mask'] = recon_token_mask[:, :self.num_historical_steps // self.interval]
+    #     data['agent']['infer_position'] = recon_position[:, 1:self.num_historical_steps // self.interval + 1]
+    #     data['agent']['infer_heading'] = recon_heading[:, 1:self.num_historical_steps // self.interval + 1]
+    #     data['agent']['infer_valid_mask'] = recon_valid_mask[:, 1: self.num_historical_steps // self.interval + 1]
+
+    #     return data
