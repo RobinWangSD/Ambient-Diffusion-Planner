@@ -1,35 +1,30 @@
 import os
-from glob import glob
 from typing import Callable, List, Optional, Tuple, Union
-import random
-from joblib import Parallel, delayed
 import torch
 from torch_geometric.data import Dataset
 from torch_geometric.data import HeteroData
-from tqdm import tqdm
-from tqdm.contrib.concurrent import process_map
-
-from nuplan.planning.utils.multithreading.worker_parallel import SingleMachineParallelExecutor
-from nuplan.planning.scenario_builder.scenario_filter import ScenarioFilter
-from nuplan.planning.scenario_builder.nuplan_db.nuplan_scenario_builder import NuPlanScenarioBuilder
-from nuplan.planning.scenario_builder.nuplan_db.nuplan_scenario_utils import ScenarioMapping
-from nuplan.planning.scenario_builder.nuplan_db.nuplan_scenario import NuPlanScenario
-
-from datasets import get_scenario_map
-from datasets import get_filter_parameters
-from datasets import get_features
-from datasets import get_plan_scenario_types
 
 
 class NuplanDataset(Dataset):
     def __init__(self,
                  root: Optional[str] = None,
-                 metadata: Optional[str] = None,
+                 metadata_path: Optional[str] = None,
                  transform: Optional[Callable] = None,
                  ) -> None:
 
         self.root = root
-        self.metadata = 
+        with open(metadata_path, 'r') as metadata_f:
+            metadata = json.load(metadata_f)
+
+        # TODO:
+        self._raw_file_names = []
+
+        self._processed_paths = []
+        self._processed_file_names = []
+        if 'file_index' in metadata:
+            for filename, file_info in metadata['file_index'].items():
+                self._processed_paths.append(file_info['path'])
+                self._processed_file_names.append(filename)
 
         super(NuplanDataset, self).__init__(root=root, transform=transform)
 

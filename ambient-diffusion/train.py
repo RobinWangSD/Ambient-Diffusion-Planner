@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger as PLTensorBoardLogger
 
-
+from datamodules import NuplanDataModule
 
 
 
@@ -28,10 +28,20 @@ def get_args():
     parser.add_argument('--save_dir', type=str, help='save dir for model ckpt', default='.')
 
     # Data
+    parser.add_argument('--root', type=str, help='path to dataset root', default='../nuplan')
     parser.add_argument('--train_meatadata', type=str, help='path to trainining meatadata', default=None)
     parser.add_argument('--val_meatadata', type=str, help='path to validation meatadata', default=None)
-
-    # Dataloader Parameters
+    parser.add_argument('--train_batch_size', type=int, help='training batch size', default=8)
+    parser.add_argument('--val_batch_size', type=int, help='validation batch size', default=16)
+    parser.add_argument('--num_historical_steps', type=int, default=20, help='Number of historical timesteps to include (default: 20)')
+    parser.add_argument('--num_future_steps', type=int, default=80, help='Number of future timesteps to predict (default: 80)')
+    parser.add_argument('--max_agents', type=int, default=64, help='Maximum number of agents to consider (default: 64)')
+    parser.add_argument('--shuffle', action='store_true', default=False, help='Whether to shuffle the dataset (default: True)')
+    
+    # DataLoader parameters
+    parser.add_argument('--num_workers', type=int, default=8, help='Number of data loading workers (default: 8)')
+    parser.add_argument('--pin_memory', action='store_true', default=False, help='Whether to pin memory for CUDA (default: False)')
+    parser.add_argument('--persistent_workers', action='store_true', default=False, help='Whether to use persistent workers (default: False)')
 
     # Training
     parser.add_argument('--seed', type=int, help='fix random seed', default=18)
@@ -80,7 +90,20 @@ def main():
         model = None
     
     # Initialize datamodule
-    data_module = None
+    data_module = NuplanDataModule(
+        root = args.root,
+        train_metadata_path = args.train_metadata,
+        val_metadata_path = args.val_metadata,
+        train_batch_size = args.train_batch_size,
+        val_batch_size = args.val_batch_size,
+        num_historical_steps = args.num_historical_steps,
+        num_future_steps=args.num_future_steps,
+        max_agents=args.max_agents,
+        shuffle=args.shuffle,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_memory,
+        persistent_workers=args.persistent_workers,
+    )
 
     # Setup logging
     logger = None
