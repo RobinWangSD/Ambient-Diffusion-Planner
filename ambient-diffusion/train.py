@@ -7,7 +7,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger as PLTensorBoardLogger
 
 from datamodules import NuplanDataModule
-
+from model import DiffusionPredictor 
 
 
 os.environ['NCCL_TIMEOUT'] = '600'
@@ -37,7 +37,7 @@ def get_args():
     parser.add_argument('--num_future_steps', type=int, default=80, help='Number of future timesteps to predict (default: 80)')
     parser.add_argument('--max_agents', type=int, default=64, help='Maximum number of agents to consider (default: 64)')
     parser.add_argument('--shuffle', action='store_true', default=False, help='Whether to shuffle the dataset (default: True)')
-    
+
     # DataLoader parameters
     parser.add_argument('--num_workers', type=int, default=8, help='Number of data loading workers (default: 8)')
     parser.add_argument('--pin_memory', action='store_true', default=False, help='Whether to pin memory for CUDA (default: False)')
@@ -47,6 +47,8 @@ def get_args():
     parser.add_argument('--seed', type=int, help='fix random seed', default=18)
     parser.add_argument('--train_epochs', type=int, help='epochs of training', default=500)
     parser.add_argument('--learning_rate', type=float, help='learning rate (default: 5e-4)', default=5e-4)
+    parser.add_argument('--weight_decay', type=float, help='weight decay for optimizer (default: 0.0001)', default=0.0001)
+    parser.add_argument('--warmup_epochs', type=int, help='number of warmup epochs (default: 4)', default=4)
     parser.add_argument('--logger', default='wandb', type=str, choices=['none', 'qualcomm', 'wandb', 'tensorboard'])
     parser.add_argument('--accelerator', default='gpu', type=str, help='accelerator type')
     parser.add_argument('--devices', default=-1, type=int, help='number of devices to use (-1 for all)')
@@ -54,6 +56,9 @@ def get_args():
 
     # Model
     parser.add_argument('--ckpt_path', type=str, help='path to load model weights', default=None)
+    parser.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension size (default: 128)')
+    parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads (default: 8)')
+    parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate (default: 0.1)')
 
     return args 
 
@@ -81,13 +86,24 @@ def main():
     set_seed(args.seed)
 
     # Initialize model weights
+    model_params = {
+        'num_historical_steps': args.num_historical_steps,
+        'num_future_steps': args.num_future_steps,
+        'hidden_dim': args.hidden_dim,
+        'num_heads': args.num_heads,
+        'dropout': args.dropout,
+        'lr': args.learning_rate,
+        'weight_decay': args.weight_decay,
+        'warmup_epochs': args.warmup_epochs
+    }
+
     # TODO: Load from checkpoint path 
     if args.ckpt_path is not None:
         print(f'Loading model from checkpoint: {args.ckpt_path}')
         model = None
     else:
         print('Initializing with new weights ...')
-        model = None
+        model = DiffusionPredictor(**model_params)
     
     # Initialize datamodule
     data_module = NuplanDataModule(
