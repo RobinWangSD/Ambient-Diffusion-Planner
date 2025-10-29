@@ -2,13 +2,16 @@ import os
 import torch
 import argparse
 from typing import Any, Dict, Optional
+
+import wandb
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger as PLTensorBoardLogger
 
 from datamodules import NuplanDataModule
-from model import DiffusionPredictor 
+from models import DiffusionPredictor 
 
+from utils.train_utils import set_seed
 
 os.environ['NCCL_TIMEOUT'] = '600'
 
@@ -24,13 +27,13 @@ def boolean(v):
 
 def get_args():
     parser = argparse.ArgumentParser(description='Training')
-    parser.add_argument('--name', type=str, help='log name (default: 'ambient-diffusion')', default='ambient-diffusion')
+    parser.add_argument('--name', type=str, help="log name (default: 'ambient-diffusion')", default='ambient-diffusion')
     parser.add_argument('--save_dir', type=str, help='save dir for model ckpt', default='.')
 
     # Data
     parser.add_argument('--root', type=str, help='path to dataset root', default='../nuplan')
-    parser.add_argument('--train_meatadata', type=str, help='path to trainining meatadata', default=None)
-    parser.add_argument('--val_meatadata', type=str, help='path to validation meatadata', default=None)
+    parser.add_argument('--train_metadata', type=str, help='path to trainining meatadata', default=None)
+    parser.add_argument('--val_metadata', type=str, help='path to validation meatadata', default=None)
     parser.add_argument('--train_batch_size', type=int, help='training batch size', default=8)
     parser.add_argument('--val_batch_size', type=int, help='validation batch size', default=16)
     parser.add_argument('--num_historical_steps', type=int, default=20, help='Number of historical timesteps to include (default: 20)')
@@ -59,6 +62,8 @@ def get_args():
     parser.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension size (default: 128)')
     parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads (default: 8)')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate (default: 0.1)')
+
+    args = parser.parse_args()
 
     return args 
 
@@ -106,7 +111,7 @@ def main():
         model = DiffusionPredictor(**model_params)
     
     # Initialize datamodule
-    data_module = NuplanDataModule(
+    datamodule = NuplanDataModule(
         root = args.root,
         train_metadata_path = args.train_metadata,
         val_metadata_path = args.val_metadata,
@@ -142,7 +147,6 @@ def main():
         logger = PLTensorBoardLogger(save_dir=save_path, name=args.name)
 
     # Setup callbacks
-    callbacks = []
     # TODO: setup ModelCheckpointCallBack
     checkpoint_callback = ModelCheckpoint(
         dirpath=save_path,
@@ -156,7 +160,7 @@ def main():
     )
     # Learning rate monitor
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
-    callbacks.append(checkpoint_callback, lr_monitor)
+    callbacks = [checkpoint_callback, lr_monitor]
 
     # Initialize trainer
     trainer = pl.Trainer(

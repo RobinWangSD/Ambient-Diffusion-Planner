@@ -1,11 +1,6 @@
 import torch
 from torch_geometric.transforms import BaseTransform
 
-from utils import transform_point_to_local_coordinate
-from utils import transform_point_to_global_coordinate
-from utils import wrap_angle
-from utils import compute_average_corner_distance
-
 Type = {
     0: 'Vehicle', 
     1: 'Pedestrian', 
@@ -17,10 +12,12 @@ class TargetBuilder(BaseTransform):
         self, 
         num_historical_steps: int = 20,
         num_future_steps: int = 80, 
+        max_agents: int = 20,
         ):
         super(TargetBuilder, self).__init__()
         self.num_historical_steps = num_historical_steps
         self.num_future_steps = num_future_steps
+        self.max_agents = max_agents
 
     def __call__(self, data):
         # load data
@@ -33,7 +30,8 @@ class TargetBuilder(BaseTransform):
         origin = position[:, self.num_historical_steps]
         theta = heading[:, self.num_historical_steps]
         cos, sin = theta.cos(), theta.sin()
-        
+
+        return data
 
     # def __call__(self, data):
     #     # load data
