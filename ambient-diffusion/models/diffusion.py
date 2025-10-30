@@ -40,6 +40,7 @@ class DiffusionPredictor(pl.LightningModule):
         # self.denoiser = Denoiser()
 
     def training_step(self, data: Batch, batch_idx: int) -> None:
+        
         return loss
 
     def validation_step(self, data: Batch, batch_idx: int) -> None:
