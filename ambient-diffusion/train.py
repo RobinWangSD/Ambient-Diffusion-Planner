@@ -32,8 +32,8 @@ def get_args():
 
     # Data
     parser.add_argument('--root', type=str, help='path to dataset root', default='../nuplan')
-    parser.add_argument('--train_metadata', type=str, help='path to trainining meatadata', default=None)
-    parser.add_argument('--val_metadata', type=str, help='path to validation meatadata', default=None)
+    parser.add_argument('--train_metadata', type=str, help='path to trainining metadata', default=None)
+    parser.add_argument('--val_metadata', type=str, help='path to validation metadata', default=None)
     parser.add_argument('--train_batch_size', type=int, help='training batch size', default=8)
     parser.add_argument('--val_batch_size', type=int, help='validation batch size', default=16)
     parser.add_argument('--num_historical_steps', type=int, default=20, help='Number of historical timesteps to include (default: 20)')
@@ -61,6 +61,7 @@ def get_args():
     parser.add_argument('--ckpt_path', type=str, help='path to load model weights', default=None)
     parser.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension size (default: 128)')
     parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads (default: 8)')
+    parser.add_argument('--num_hops', type=int, default=4, help='Number of hops for map encoder graph propagation (default: 4)')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate (default: 0.1)')
 
     args = parser.parse_args()
@@ -96,6 +97,7 @@ def main():
         'num_future_steps': args.num_future_steps,
         'hidden_dim': args.hidden_dim,
         'num_heads': args.num_heads,
+        'num_hops': args.num_hops,
         'dropout': args.dropout,
         'lr': args.learning_rate,
         'weight_decay': args.weight_decay,
