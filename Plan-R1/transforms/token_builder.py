@@ -13,17 +13,29 @@ Type = {
 }
 
 class TokenBuilder(BaseTransform):
-    def __init__(self, token_dict_path, interval, num_historical_steps=20, mode='pred'):
+    def __init__(self, token_dict_path, interval, num_historical_steps=20, mode='pred', max_agents=20):
         super(TokenBuilder, self).__init__()
         self.interval = interval
         self.num_historical_steps = num_historical_steps
         self.mode = mode
+        self.max_agents = max_agents
         
         # load tokens
         self.tokens = torch.load(token_dict_path)
 
     def __call__(self, data):
         # load data
+        data['agent']['position'] = data['agent']['position'][:self.max_agents]    # (A, T=101, (x,y))
+        data['agent']['heading'] = data['agent']['heading'][:self.max_agents]      # (A, T)
+        data['agent']['velocity'] = data['agent']['velocity'][:self.max_agents]    # (A, T, (vx, vy))
+        data['agent']['visible_mask'] = data['agent']['visible_mask'][:self.max_agents]    # (A, T)
+        data['agent']['type'] = data['agent']['type'][:self.max_agents]            # (A,)
+        data['agent']['id'] = data['agent']['id'][:self.max_agents]
+        data['agent']['identity'] = data['agent']['identity'][:self.max_agents]
+        data['agent']['box'] = data['agent']['box'][:self.max_agents]
+        data['agent']['num_nodes'] = min(self.max_agents, data['agent']['num_nodes'])
+        
+        
         position = data['agent']['position']    # (A, T=101, (x,y))
         heading = data['agent']['heading']      # (A, T)
         velocity = data['agent']['velocity']    # (A, T, (vx, vy))

@@ -24,6 +24,7 @@ class PlanR1(pl.LightningModule):
                  hidden_dim: int = 128,
                  num_historical_steps: int = 20,
                  num_future_steps: int = 80,
+                 max_agents: int = 20,
                  agent_radius: float = 60,
                  polygon_radius: float = 30,
                  num_attn_layers: int = 6,
@@ -88,6 +89,7 @@ class PlanR1(pl.LightningModule):
             hidden_dim=hidden_dim,
             num_historical_steps=num_historical_steps,
             num_future_steps=num_future_steps,
+            max_agents=max_agents,
             agent_radius=agent_radius,
             polygon_radius=polygon_radius,
             num_attn_layers=num_attn_layers,
@@ -110,6 +112,7 @@ class PlanR1(pl.LightningModule):
             hidden_dim=hidden_dim,
             num_historical_steps=num_historical_steps,
             num_future_steps=num_future_steps,
+            max_agents=max_agents,
             agent_radius=agent_radius,
             polygon_radius=polygon_radius,
             num_attn_layers=num_attn_layers,
@@ -144,7 +147,7 @@ class PlanR1(pl.LightningModule):
     def training_step(self, data: Batch) -> None:
         if self.mode == 'pred':
             # pred token and reward
-            polygon_embs = self.pred_map_encoder(data=data) 
+            polygon_embs = self.pred_map_encoder(data=data) # (N_poly, )
             feat = self.pred_backbone(data=data, g_embs=polygon_embs)
             logits = self.pred_decoder_head(feat)
             # compute loss

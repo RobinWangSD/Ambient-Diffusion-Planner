@@ -21,6 +21,7 @@ class Backbone(nn.Module):
                  hidden_dim: int,
                  num_historical_steps: int,
                  num_future_steps: int,
+                 max_agents: int,
                  agent_radius: float,
                  polygon_radius: float,
                  num_attn_layers: int, 
@@ -33,6 +34,7 @@ class Backbone(nn.Module):
         self.hidden_dim = hidden_dim
         self.num_historical_steps = num_historical_steps
         self.num_historical_intervals = num_historical_steps // interval
+        self.max_agents = max_agents
         self.num_intervals = (num_future_steps + num_historical_steps) // interval
         self.agent_radius = agent_radius
         self.polygon_radius = polygon_radius
@@ -66,8 +68,8 @@ class Backbone(nn.Module):
     def forward(self, data: Batch, g_embs: torch.Tensor) -> torch.Tensor:
         # agent embedding
         a_box = data['agent']['box']                                     #[(N1,...,Nb),4]
-        a_type = data['agent']['type'].long()
-        a_identity = data['agent']['identity'].long()
+        a_type = data['agent']['type'].long()   # (Na,) vehicle, pedestrian, bike
+        a_identity = data['agent']['identity'].long()   # (Na,) ego or agent
         a_embs = self.agent_emb_layer(input=a_box) + self._agent_type_embs(a_type) + self._identity_type_embs(a_identity)    #[(N1,...,Nb),D]
 
         num_agents, num_intervals, _ = data['agent']['recon_position'].size()   #[(N1,...,Nb),T,2]
