@@ -44,6 +44,7 @@ class DiffusionPredictor(pl.LightningModule):
             dropout=dropout
         )
         
+        
         # TODO: Add agent encoder and denoiser
         # self.agent_encoder = AgentEncoder()
         # self.denoiser = Denoiser()
