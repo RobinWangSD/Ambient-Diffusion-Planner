@@ -321,12 +321,12 @@ def model_wrapper(
             if guidance_scale == 1. or unconditional_condition is None:
                 return noise_pred_fn(x, t_continuous, cond=condition)
             else:
-                # x_in = torch.cat([x] * 2)
-                # t_in = torch.cat([t_continuous] * 2)
-                # c_in = torch.cat([unconditional_condition, condition])
-                # noise_uncond, noise = noise_pred_fn(x_in, t_in, cond=c_in).chunk(2)
-                noise_uncond = noise_pred_fn(x, t_continuous, cond=unconditional_condition)
-                noise = noise_pred_fn(x, t_continuous, cond=condition)
+                x_in = torch.cat([x] * 2)
+                t_in = torch.cat([t_continuous] * 2)
+                c_in = torch.cat([unconditional_condition, condition])
+                noise_uncond, noise = noise_pred_fn(x_in, t_in, cond=c_in).chunk(2)
+                # noise_uncond = noise_pred_fn(x, t_continuous, cond=unconditional_condition)
+                # noise = noise_pred_fn(x, t_continuous, cond=condition)
                 return noise_uncond + guidance_scale * (noise - noise_uncond)
 
     assert model_type in ["noise", "x_start", "v", "score"]

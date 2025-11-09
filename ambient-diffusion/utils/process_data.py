@@ -1,6 +1,6 @@
 import torch
 import math
-from typing import Tuple
+from typing import Tuple, Union
 
 
 def wrap_angle(angle: torch.Tensor, min_val: float = -math.pi, max_val: float = math.pi) -> torch.Tensor:
@@ -55,3 +55,36 @@ def generate_reachable_matrix(edge_index: torch.Tensor, num_hops: int, max_nodes
 
         current_matrix = next_matrix
     return reach_matrices
+
+
+def drop_edge_between_samples(valid_mask: torch.Tensor,
+                              batch: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]) -> torch.Tensor:
+    """Masks out edges that connect nodes from different samples."""
+    if isinstance(batch, torch.Tensor):
+        batch_matrix = batch.unsqueeze(-1) == batch.unsqueeze(-2)
+    else:
+        batch_src, batch_dst = batch
+        batch_matrix = batch_src.unsqueeze(-1) == batch_dst.unsqueeze(-2)
+
+    if valid_mask.ndim == batch_matrix.ndim:
+        valid_mask = valid_mask & batch_matrix
+    elif valid_mask.ndim == batch_matrix.ndim + 1:
+        valid_mask = valid_mask & batch_matrix.unsqueeze(0)
+    else:
+        raise ValueError("Mismatched shapes between valid_mask and batch assignments.")
+    return valid_mask
+
+
+def angle_between_2d_vectors(ctr_vector: torch.Tensor,
+                             nbr_vector: torch.Tensor,
+                             eps: float = 1e-6) -> torch.Tensor:
+    """Returns signed angle from ctr_vector to nbr_vector."""
+    ctr_norm = torch.norm(ctr_vector, dim=-1, keepdim=True).clamp(min=eps)
+    nbr_norm = torch.norm(nbr_vector, dim=-1, keepdim=True).clamp(min=eps)
+    ctr_unit = ctr_vector / ctr_norm
+    nbr_unit = nbr_vector / nbr_norm
+    dot = (ctr_unit * nbr_unit).sum(dim=-1).clamp(min=-1.0, max=1.0)
+    cross = ctr_unit[..., 0] * nbr_unit[..., 1] - ctr_unit[..., 1] * nbr_unit[..., 0]
+    angle = torch.atan2(cross, dot)
+    angle = torch.where(torch.norm(nbr_vector, dim=-1) < eps, torch.zeros_like(angle), angle)
+    return angle

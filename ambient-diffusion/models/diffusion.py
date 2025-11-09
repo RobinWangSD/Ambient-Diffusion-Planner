@@ -9,7 +9,13 @@ from copy import deepcopy
 import os
 
 from layers import TwoLayerMLP
-from modules import MapEncoder
+from modules import (
+    MapEncoder,
+    AgentEncoder,
+    Diffuser,
+)
+
+from diffusion_utils import VPSDE_linear
 
 class DiffusionPredictor(pl.LightningModule):
     def __init__(self,
@@ -43,16 +49,28 @@ class DiffusionPredictor(pl.LightningModule):
             num_heads=num_heads,
             dropout=dropout
         )
-        
-        
-        # TODO: Add agent encoder and denoiser
-        # self.agent_encoder = AgentEncoder()
-        # self.denoiser = Denoiser()
+        self.agent_encoder = AgentEncoder()
+        self.denoiser = Diffuser()
+
+        # diffusion utils
+        self._sde = VPSDE_linear()
+
+    @property
+    def sde(self):
+        return self._sde
 
     def training_step(self, data: Batch, batch_idx: int) -> None:
+        
+        # add noise 
+        target = data['agent']['target']        # ([N1, N2, ...], T_f, 4)
+        t = data['agent']['diffusion_time']     # ([N1, N2, ...])
+        z = torch.randn_like(target, device=target.device)  # ([N1, N2, ...], T_f, 4)
+        mean, std = self._sde.marginal_prob(target, t)  
+        x_t = mean + std * z
+
         # Encode map features using PlanR1's MapEncoder
         map_embeddings = self.map_encoder(data)  # Returns [(M1,...,Mb), hidden_dim]
-        
+        agent_embs, visible_mask = self.agent_encoder(data, map_embeddings)
         # TODO: Implement diffusion training step
         # - Use map_embeddings in your denoising process
         # - Implement forward diffusion (add noise)

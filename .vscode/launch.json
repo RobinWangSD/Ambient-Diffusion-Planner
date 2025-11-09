@@ -1,0 +1,53 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "train_diffusion",
+            "type": "python",
+            "request": "launch",
+            "program": "/root/Ambient-Diffusion-Planner/ambient-diffusion/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--name", "debug-map-encoder",
+                "--root", "/avl-west/nuplan",
+                "--train_metadata", "/avl-west/nuplan/file_index_pred.json",
+                "--val_metadata", "/avl-west/nuplan/file_index_pred.json",
+                "--train_batch_size", "1",
+                "--val_batch_size", "1",
+                "--num_workers", "0",
+                "--logger", "wandb",
+                "--accelerator", "gpu",
+                "--devices", "1",
+                "--train_epochs", "1",
+                "--hidden_dim", "128",
+                "--num_heads", "8",
+                "--num_hops", "4",
+                "--dropout", "0.1"
+            ]
+        },
+        {
+            "name": "train_ar",
+            "type": "python",
+            "request": "launch",
+            "program": "/root/Ambient-Diffusion-Planner/Plan-R1/train.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--config", "/root/Ambient-Diffusion-Planner/Plan-R1/config/train/pred_debug.yaml",
+            ]
+        }
+    ]
+}

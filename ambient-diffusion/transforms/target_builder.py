@@ -61,4 +61,9 @@ class TargetBuilder(BaseTransform):
             ],
             dim = -1,
         )   # (A, T_f, 4)
+
+        # diffusion
+        eps = 1e-3 
+        t = torch.rand(1, device=position.device) * (1 - eps) + eps
+        data['agent']['diffusion_time'] = t.repeat_interleave(data['agent']['num_nodes'])
         return data
