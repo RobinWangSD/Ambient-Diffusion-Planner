@@ -36,7 +36,7 @@ def get_args():
     parser.add_argument('--val_metadata', type=str, help='path to validation metadata', default=None)
     parser.add_argument('--train_batch_size', type=int, help='training batch size', default=8)
     parser.add_argument('--val_batch_size', type=int, help='validation batch size', default=16)
-    parser.add_argument('--num_historical_steps', type=int, default=20, help='Number of historical timesteps to include (default: 20)')
+    parser.add_argument('--num_historical_steps', type=int, default=21, help='Number of historical timesteps to include (default: 20)')
     parser.add_argument('--num_future_steps', type=int, default=80, help='Number of future timesteps to predict (default: 80)')
     parser.add_argument('--max_agents', type=int, default=64, help='Maximum number of agents to consider (default: 64)')
     parser.add_argument('--shuffle', action='store_true', default=False, help='Whether to shuffle the dataset (default: True)')
@@ -63,6 +63,20 @@ def get_args():
     parser.add_argument('--num_heads', type=int, default=8, help='Number of attention heads (default: 8)')
     parser.add_argument('--num_hops', type=int, default=4, help='Number of hops for map encoder graph propagation (default: 4)')
     parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate (default: 0.1)')
+    parser.add_argument('--agent_time_span', type=int, default=10, help='Agent encoder temporal window span')
+    parser.add_argument('--agent_radius', type=float, default=60.0, help='Agent encoder neighbor radius')
+    parser.add_argument('--agent_polygon_radius', type=float, default=50.0, help='Agent to map radius')
+    parser.add_argument('--agent_num_attn_layers', type=int, default=3, help='Agent encoder attention layers')
+    parser.add_argument('--agent_num_heads', type=int, default=8, help='Agent encoder attention heads')
+    parser.add_argument('--agent_dropout', type=float, default=0.1, help='Agent encoder dropout')
+    parser.add_argument('--diffuser_num_layers', type=int, default=3, help='Number of diffuser attention layers')
+    parser.add_argument('--diffuser_num_heads', type=int, default=8, help='Number of diffuser attention heads')
+    parser.add_argument('--diffuser_dropout', type=float, default=0.1, help='Diffuser dropout rate')
+    parser.add_argument('--diffuser_temporal_span', type=int, default=6, help='Temporal attention span for diffuser')
+    parser.add_argument('--diffuser_agent_radius', type=float, default=60.0, help='Diffuser agent-agent radius')
+    parser.add_argument('--diffuser_polygon_radius', type=float, default=50.0, help='Diffuser map radius')
+    parser.add_argument('--diffuser_segment_length', type=int, default=80, help='Diffuser segment length')
+    parser.add_argument('--diffuser_segment_overlap', type=int, default=0, help='Diffuser segment overlap')
 
     args = parser.parse_args()
 
@@ -99,6 +113,20 @@ def main():
         'num_heads': args.num_heads,
         'num_hops': args.num_hops,
         'dropout': args.dropout,
+        'agent_time_span': args.agent_time_span,
+        'agent_radius': args.agent_radius,
+        'agent_polygon_radius': args.agent_polygon_radius,
+        'agent_num_attn_layers': args.agent_num_attn_layers,
+        'agent_num_heads': args.agent_num_heads,
+        'agent_dropout': args.agent_dropout,
+        'diffuser_num_layers': args.diffuser_num_layers,
+        'diffuser_num_heads': args.diffuser_num_heads,
+        'diffuser_dropout': args.diffuser_dropout,
+        'diffuser_temporal_span': args.diffuser_temporal_span,
+        'diffuser_agent_radius': args.diffuser_agent_radius,
+        'diffuser_polygon_radius': args.diffuser_polygon_radius,
+        'diffuser_segment_length': args.diffuser_segment_length,
+        'diffuser_segment_overlap': args.diffuser_segment_overlap,
         'lr': args.learning_rate,
         'weight_decay': args.weight_decay,
         'warmup_epochs': args.warmup_epochs
@@ -142,6 +170,8 @@ def main():
         logger = WandbLogger(
             project='AmbientDiffusion',
             name=args.name,
+            entity='luw015',
+            log_model=True,
             save_dir=save_path,
             config=vars(args)
         )
@@ -186,4 +216,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

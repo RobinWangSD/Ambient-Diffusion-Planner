@@ -90,7 +90,7 @@ class MapEncoder(nn.Module):
         g2g_edge_attr_type.append(F.one_hot(torch.full((num_right_edges,), self._g2g_edge_types.index('RIGHT')).long(), num_classes=len(self._g2g_edge_types)).float().to(device))
         g2g_edge_attr_hop.append(torch.ones(num_right_edges, device=device))
 
-        num_polygons = data['polygon']['num_nodes']
+        num_polygons = data['polygon']['num_nodes'] if 'num_nodes' in data['polygon'] else data['polygon']['position'].size(0)
         g2g_incoming_edge_index = data['polygon', 'polygon']['incoming_edge_index']
         g2g_incoming_edge_index_all = generate_reachable_matrix(g2g_incoming_edge_index, self.num_hops, num_polygons)
         for i in range(self.num_hops):
@@ -130,4 +130,3 @@ class MapEncoder(nn.Module):
         g_embs = g_embs + self._route_embs.weight[data['polygon']['on_route_mask'].long()]        #[(M1,...,Mb),D]
 
         return g_embs
-

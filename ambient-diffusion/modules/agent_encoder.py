@@ -23,7 +23,7 @@ class AgentEncoder(nn.Module):
 
     def __init__(
         self,
-        num_historical_steps: int = 20,
+        num_historical_steps: int = 21,
         hidden_dim: int = 128,
         time_span: int = 10,
         agent_radius: float = 60.0,
@@ -41,6 +41,7 @@ class AgentEncoder(nn.Module):
         self.num_attn_layers = num_attn_layers
 
         self.state_emb_layer = TwoLayerMLP(input_dim=4, hidden_dim=hidden_dim, output_dim=hidden_dim)
+        self.agent_emb_layer = TwoLayerMLP(input_dim=4, hidden_dim=hidden_dim, output_dim=hidden_dim)
         self.type_embedding = nn.Embedding(3, hidden_dim)
         self.identity_embedding = nn.Embedding(2, hidden_dim)
 
@@ -94,20 +95,20 @@ class AgentEncoder(nn.Module):
         Returns:
             Tuple of (agent_embeddings [Na, T, D], valid_mask [Na, T]).
         """
-        position = data['agent']['position']
-        heading = data['agent']['heading']
-        velocity = data['agent']['velocity']
-        visible_mask = data['agent'].get('visible_mask', torch.ones_like(heading, dtype=torch.bool))
+        agent_store = data['agent']
+        
+        position = agent_store['history_position']
+        heading = agent_store['history_heading']
+        velocity = agent_store['history_velocity']
+        visible_mask = agent_store['history_mask'].bool()
+        
+        agent_box = data['agent']['box'] 
         agent_type = data['agent'].get('type', torch.zeros(position.size(0), device=position.device, dtype=torch.long)).long()
         agent_identity = data['agent'].get('identity', torch.zeros(position.size(0), device=position.device, dtype=torch.long)).long()
         batch_agent = data['agent'].get('batch', torch.zeros(position.size(0), device=position.device, dtype=torch.long))
 
         num_agents = position.shape[0]
-
-        position = position[:, :self.num_historical_steps]
-        heading = heading[:, :self.num_historical_steps]
-        velocity = velocity[:, :self.num_historical_steps]
-        visible_mask = visible_mask[:, :self.num_historical_steps].bool()
+        assert num_agents == agent_store['num_nodes']
 
         head_vector = torch.stack([heading.cos(), heading.sin()], dim=-1)
         motion_vector = torch.cat(
@@ -121,7 +122,7 @@ class AgentEncoder(nn.Module):
 
         state_feat = torch.stack([speed_motion, angle_motion, speed_velocity, angle_velocity], dim=-1)
         state_emb = self.state_emb_layer(state_feat.view(-1, state_feat.size(-1))).view(num_agents, self.num_historical_steps, self.hidden_dim)
-        static_emb = self.type_embedding(agent_type) + self.identity_embedding(agent_identity)
+        static_emb = self.agent_emb_layer(input=agent_box) + self.type_embedding(agent_type) + self.identity_embedding(agent_identity)
         agent_embs = state_emb + static_emb.unsqueeze(1)
 
         flat_agent_embs = agent_embs.reshape(-1, self.hidden_dim)
@@ -163,7 +164,7 @@ class AgentEncoder(nn.Module):
             edge_attr = flat_position.new_zeros((0, self.hidden_dim))
             return edge_index, edge_attr
 
-        time_delta = (time_index[edge_index[0]] - time_index[edge_index[1]]).abs()
+        time_delta = time_index[edge_index[1]] - time_index[edge_index[0]]
         valid = time_delta > 0
         if self.time_span is not None:
             valid = valid & (time_delta <= self.time_span)
