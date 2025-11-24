@@ -159,7 +159,7 @@ def main():
     )
 
 
-    segment_info = f"seg{args.diffuser_segment_length}o{args.diffuser_segment_overlap}"
+    segment_info = f"seg{args.diffuser_segment_length}o{args.diffuser_segment_overlap}n{args.diffuser_normalize_segments}"
     model_info = f"hist{args.num_historical_steps}_fut{args.num_future_steps}_hd{args.hidden_dim}_heads{args.num_heads}_layers{args.diffuser_num_layers}"
     logger_name = f"{args.name}_{segment_info}_{model_info}"
     # Setup logging
@@ -185,7 +185,13 @@ def main():
         logger = PLTensorBoardLogger(save_dir=save_path, name=logger_name)
 
     # Setup callbacks
-    # TODO: setup ModelCheckpointCallBack
+    training_config = {
+        'args': args_dict,
+        'model_params': model_params,
+        'logger': args.logger,
+        'checkpoint_dir': save_path,
+    }
+    dump(training_config, os.path.join(save_path, 'training_config.json'), file_format='json', indent=4)
     checkpoint_callback = ModelCheckpoint(
         dirpath=save_path,
         filename=None,
