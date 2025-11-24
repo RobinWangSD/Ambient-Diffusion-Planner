@@ -77,6 +77,7 @@ def get_args():
     parser.add_argument('--diffuser_polygon_radius', type=float, default=50.0, help='Diffuser map radius')
     parser.add_argument('--diffuser_segment_length', type=int, default=80, help='Diffuser segment length')
     parser.add_argument('--diffuser_segment_overlap', type=int, default=0, help='Diffuser segment overlap')
+    parser.add_argument('--diffuser_normalize_segments', type=bool, default=True, help='Normalize diffuser segment to the starting points')
 
     args = parser.parse_args()
 
@@ -127,6 +128,7 @@ def main():
         'diffuser_polygon_radius': args.diffuser_polygon_radius,
         'diffuser_segment_length': args.diffuser_segment_length,
         'diffuser_segment_overlap': args.diffuser_segment_overlap,
+        'diffuser_normalize_segments': args.diffuser_normalize_segments,
         'lr': args.learning_rate,
         'weight_decay': args.weight_decay,
         'warmup_epochs': args.warmup_epochs
@@ -156,6 +158,10 @@ def main():
         persistent_workers=args.persistent_workers,
     )
 
+
+    segment_info = f"seg{args.diffuser_segment_length}o{args.diffuser_segment_overlap}"
+    model_info = f"hist{args.num_historical_steps}_fut{args.num_future_steps}_hd{args.hidden_dim}_heads{args.num_heads}_layers{args.diffuser_num_layers}"
+    logger_name = f"{args.name}_{segment_info}_{model_info}"
     # Setup logging
     logger = None
     if args.logger == 'none':
@@ -169,14 +175,14 @@ def main():
         # Create logger
         logger = WandbLogger(
             project='AmbientDiffusion',
-            name=args.name,
+            name=logger_name,
             entity='luw015',
             log_model=True,
             save_dir=save_path,
             config=vars(args)
         )
     elif args.logger == 'tensorboard':
-        logger = PLTensorBoardLogger(save_dir=save_path, name=args.name)
+        logger = PLTensorBoardLogger(save_dir=save_path, name=logger_name)
 
     # Setup callbacks
     # TODO: setup ModelCheckpointCallBack

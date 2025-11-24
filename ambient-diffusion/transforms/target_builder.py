@@ -82,6 +82,8 @@ class TargetBuilder(BaseTransform):
         
         # target_heading = wrap_angle(heading - theta.unsqueeze(-1))
 
+        position = position.masked_fill(~target_valid_mask.unsqueeze(-1), 0.0)
+        heading = heading.masked_fill(~target_valid_mask, 0.0)
         target = torch.cat(
             [
                 position,
@@ -90,7 +92,6 @@ class TargetBuilder(BaseTransform):
             ],
             dim = -1,
         )   # (A, T_f, 4)
-        target = target.masked_fill(~target_valid_mask.unsqueeze(-1), 0.0)
         data['agent']['target'] = target
         data['agent']['target_valid_mask'] = target_valid_mask
 

@@ -10,6 +10,7 @@ from layers import GraphAttention, TwoLayerMLP
 from utils import (
     compute_angles_lengths_2D,
     transform_point_to_local_coordinate,
+    generate_counterclockwise_rotation_matrix,
     wrap_angle,
     drop_edge_between_samples,
 )
@@ -46,7 +47,7 @@ class Diffuser(nn.Module):
     performs attention over (past -> future), (future <-> map), and (future <-> future).
     """
 
-    model_type = "eps"  # used by dpm-solver wrapper
+    model_type = "x_start"  # used by dpm-solver wrapper
 
     def __init__(
         self,
@@ -62,6 +63,7 @@ class Diffuser(nn.Module):
         polygon_radius: float = 30.0,
         segment_length: int = 80,
         segment_overlap: int = 0,
+        normalize_segments: bool = True,
     ) -> None:
         super().__init__()
         self.state_dim = state_dim
@@ -71,8 +73,9 @@ class Diffuser(nn.Module):
         self.temporal_span = temporal_span
         self.agent_radius = agent_radius
         self.polygon_radius = polygon_radius
-        self.segment_length = max(1, segment_length) + 1    # considering starting states
-        self.segment_overlap = max(0, segment_overlap)  + 1
+        self.segment_length = max(1, segment_length)   # considering starting states
+        self.segment_overlap = max(0, segment_overlap)
+        self.normalize_segments = normalize_segments
         if self.segment_overlap >= self.segment_length:
             raise ValueError("segment_overlap must be smaller than segment_length.")
 
@@ -138,12 +141,7 @@ class Diffuser(nn.Module):
             ]
         )
 
-        self.output_head = nn.Sequential(
-            nn.LayerNorm(hidden_dim),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, state_dim),
-        )
+        self.output_head = nn.Linear(hidden_dim, self.segment_length * self.state_dim)
 
     def forward(
         self,
@@ -152,6 +150,7 @@ class Diffuser(nn.Module):
         agent_embs: torch.Tensor,
         hist_mask: torch.Tensor,
         x_t: torch.Tensor,
+        current_states: torch.Tensor,
         diffusion_time: torch.Tensor,
     ) -> torch.Tensor:
         """
@@ -170,16 +169,53 @@ class Diffuser(nn.Module):
             return torch.zeros_like(x_t)
 
         device = x_t.device
-        num_agents, total_steps, _ = x_t.shape
+        stride = self.segment_length - self.segment_overlap
+
+        num_agents, num_segments, seg_len, _ = x_t.shape
+        starts = torch.arange(num_segments, device=device, dtype=torch.long) * stride
+        segment_indices = starts.unsqueeze(1) + torch.arange(seg_len, device=device, dtype=torch.long)
+        total_steps = stride * (num_segments - 1) + seg_len
+        assert total_steps == self.num_future_steps
+        segments = x_t
 
         agent_store = data['agent']
         past_pos = agent_store['history_position']
         past_heading = agent_store['history_heading']
 
-        segments, segment_indices = self._segment_future(x_t, total_steps)
-        num_agents, num_segments, _, _ = segments.shape
-        seg_position = segments[:, :, 0, :2]
-        seg_heading = torch.atan2(segments[:, :, 0, 2], segments[:, :, 0, 3])
+        segment_valid_mask = torch.ones((num_agents, num_segments, seg_len), dtype=torch.bool, device=device)
+
+        if self.normalize_segments:
+            starting_states = segments.new_empty((num_agents, num_segments, 4))
+            global_segments = torch.empty_like(segments)
+            current_state = current_states
+            for idx in range(num_segments):
+                heading = torch.atan2(current_state[:, 3], current_state[:, 2]).unsqueeze(1)
+                rotation = generate_counterclockwise_rotation_matrix(heading)
+
+                local_seg = segments[:, idx]
+                pos = torch.matmul(rotation, local_seg[..., :2].unsqueeze(-1)).squeeze(-1) + current_state[:, None, :2]
+                cos = local_seg[..., 2] * current_state[:, None, 2] - local_seg[..., 3] * current_state[:, None, 3]
+                sin = local_seg[..., 3] * current_state[:, None, 2] + local_seg[..., 2] * current_state[:, None, 3]
+
+                global_segments[:, idx] = torch.stack([pos[..., 0], pos[..., 1], cos, sin], dim=-1)
+                starting_states[:, idx] = current_state
+
+                if idx + 1 < num_segments:
+                    current_state = global_segments[:, idx, stride - 1]
+        else:
+            heading = torch.atan2(current_states[:, 3], current_states[:, 2]).view(num_agents, 1, 1)
+            rotation = generate_counterclockwise_rotation_matrix(heading)
+            pos = torch.matmul(rotation, segments[..., :2].unsqueeze(-1)).squeeze(-1) + current_states[:, None, None, :2]
+            cos = segments[..., 2] * current_states[:, None, None, 2] - segments[..., 3] * current_states[:, None, None, 3]
+            sin = segments[..., 3] * current_states[:, None, None, 2] + segments[..., 2] * current_states[:, None, None, 3]
+            global_segments = torch.stack([pos[..., 0], pos[..., 1], cos, sin], dim=-1)
+
+            starting_states = segments.new_empty((num_agents, num_segments, 4))
+            starting_states[:, 0] = current_states
+            if num_segments > 1:
+                starting_states[:, 1:] = global_segments[:, :-1, stride - 1]
+
+        heading_dtype = starting_states.dtype
 
         batch_agents = data['agent'].get(
             'batch',
@@ -191,43 +227,40 @@ class Diffuser(nn.Module):
         )
         map_heading = data['polygon'].get(
             'heading',
-            torch.zeros(map_embeddings.size(0), device=device, dtype=seg_heading.dtype),
+            torch.zeros(map_embeddings.size(0), device=device, dtype=heading_dtype),
         )
         map_heading_valid = data['polygon'].get(
             'heading_valid_mask',
-            torch.ones(map_embeddings.size(0), device=device, dtype=seg_heading.dtype),
+            torch.ones(map_embeddings.size(0), device=device, dtype=heading_dtype),
         )
         map_pos = data['polygon']['position'][:, :2]
 
-        # assume the model has no knowledge about the dataset quality
-        token_mask = torch.ones((segments.shape[:2])).to(dtype=torch.bool, device=device)
-        future_time = segment_indices[:, 0].unsqueeze(0).expand(num_agents, -1)
-
+        # build edges for segment tokens anchored at their starting states
+        token_mask = segment_valid_mask[..., 0]
+        future_time_hist = starts.view(1, -1).expand(num_agents, -1)
+        future_time_seg = torch.arange(num_segments, device=device, dtype=torch.long).unsqueeze(0).expand(num_agents, -1)
         edges_pf = self._build_past_future_edges(
             past_pos,
             past_heading,
             hist_mask,
-            seg_position,
-            seg_heading,
+            starting_states,
             token_mask,
-            future_time,
+            future_time_hist,
         )
         edges_mf = self._build_map_future_edges(
             map_pos,
             map_heading,
             map_heading_valid,
             map_batch,
-            seg_position,
-            seg_heading,
+            starting_states,
             token_mask,
             batch_agents,
         )
         edges_agent, edges_temporal = self._build_future_future_edges(
-            seg_position,
-            seg_heading,
+            starting_states,
             token_mask,
             batch_agents,
-            future_time,
+            future_time_seg,
         )
 
         segment_emb = self.segment_mlp(segments.view(num_agents, num_segments, -1))
@@ -259,32 +292,12 @@ class Diffuser(nn.Module):
             )
 
         future_token_emb = future_flat.view(num_agents, num_segments, self.hidden_dim)
-        expanded_token_emb = self._detokenize_future(
+        return self._detokenize_future(
             future_token_emb,
             segment_indices,
+            segment_valid_mask,
             total_steps,
         )
-        pred_noise = self.output_head(expanded_token_emb)
-        return pred_noise
-
-    def _segment_future(
-        self,
-        x_t: torch.Tensor,
-        total_steps: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        device = x_t.device
-
-        overlap = self.segment_overlap
-        length = self.segment_length
-        stride = length - overlap
-        num_segments = int((total_steps - overlap) / stride)
-
-        starts = torch.arange(num_segments, device=device, dtype=torch.long) * stride
-        indices = starts.unsqueeze(1) + torch.arange(length, device=device, dtype=torch.long).unsqueeze(0)
-        
-        segments = x_t[:, indices]
-
-        return segments, indices
 
     def _detokenize_future(
         self,
@@ -293,68 +306,56 @@ class Diffuser(nn.Module):
         segment_valid_mask: torch.Tensor,
         total_steps: int,
     ) -> torch.Tensor:
-        batch_size, _, hidden_dim = token_emb.shape
-        device = token_emb.device
-        reconstructed = token_emb.new_zeros(batch_size, total_steps, hidden_dim)
-        weights = token_emb.new_zeros(batch_size, total_steps, 1)
-
-        idx_hidden = segment_indices.unsqueeze(-1).expand(-1, -1, -1, hidden_dim)
-        src = token_emb.unsqueeze(2) * segment_valid_mask.unsqueeze(-1).float()
-        reconstructed.scatter_add_(1, idx_hidden, src)
-
-        idx_weight = segment_indices.unsqueeze(-1)
-        weight_src = segment_valid_mask.unsqueeze(-1).float()
-        weights.scatter_add_(1, idx_weight, weight_src)
-
-        reconstructed = reconstructed / weights.clamp(min=1.0)
-        return reconstructed
+        batch_size, num_segments, _ = token_emb.shape
+        pred = self.output_head(token_emb)
+        pred = pred.view(batch_size, num_segments, self.segment_length, self.state_dim)
+        return pred * segment_valid_mask.unsqueeze(-1).float()
 
     def _build_past_future_edges(
         self,
         past_pos: torch.Tensor,
         past_heading: torch.Tensor,
         hist_mask: torch.Tensor,
-        future_pos: torch.Tensor,
-        future_heading: torch.Tensor,
+        future_state: torch.Tensor,
         future_mask: torch.Tensor,
         future_time: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         device = past_pos.device
-        num_agents, _, _ = past_pos.shape
-        future_steps = future_pos.size(1)
+        num_agents, hist_steps, _ = past_pos.shape
+        future_steps = future_state.size(1)
 
         if num_agents == 0:
             edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
-            edge_attr = torch.zeros((0, self.hidden_dim), device=device)
+            edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=future_state.dtype)
             return edge_index, edge_attr
 
-        hist_idx = torch.arange(num_agents * self.num_historical_steps, device=device).view(num_agents, self.num_historical_steps)
+        hist_idx = torch.arange(num_agents * hist_steps, device=device).view(num_agents, hist_steps)
         future_idx = torch.arange(num_agents * future_steps, device=device).view(num_agents, future_steps)
         connectivity = hist_mask.unsqueeze(-1) & future_mask.unsqueeze(1)
 
         if not connectivity.any():
             edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
-            edge_attr = torch.zeros((0, self.hidden_dim), device=device)
+            edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=future_state.dtype)
             return edge_index, edge_attr
 
-        src = hist_idx.unsqueeze(-1).expand(-1, self.num_historical_steps, future_steps)[connectivity]
-        dst = future_idx.unsqueeze(1).expand(-1, self.num_historical_steps, future_steps)[connectivity]
+        agent_ids, hist_ids, future_ids = connectivity.nonzero(as_tuple=True)
+        src = hist_idx[agent_ids, hist_ids]
+        dst = future_idx[agent_ids, future_ids]
 
-        gather_mask = connectivity
+        future_pos = future_state[..., :2]
+        future_heading = torch.atan2(future_state[..., 3], future_state[..., 2])
         rel_vector = transform_point_to_local_coordinate(
-            past_pos.unsqueeze(-2).expand(-1, -1, future_steps, -1)[gather_mask],
-            future_pos.unsqueeze(1).expand(-1, self.num_historical_steps, -1, -1)[gather_mask],
-            future_heading.unsqueeze(1).expand(-1, self.num_historical_steps, -1)[gather_mask],
+            past_pos[agent_ids, hist_ids],
+            future_pos[agent_ids, future_ids],
+            future_heading[agent_ids, future_ids],
         )
         length, theta = compute_angles_lengths_2D(rel_vector)
         heading_delta = wrap_angle(
-            past_heading.unsqueeze(-1).expand(-1, -1, future_steps)[gather_mask]
-            - future_heading.unsqueeze(1).expand(-1, self.num_historical_steps, -1)[gather_mask]
+            past_heading[agent_ids, hist_ids] - future_heading[agent_ids, future_ids]
         )
 
-        time_hist = torch.arange(self.num_historical_steps, device=device).view(1, self.num_historical_steps, 1).float()
-        time_future = future_time.view(num_agents, 1, future_steps)
-        delta_t = (time_future - time_hist).expand(num_agents, -1, -1)[gather_mask]
+        time_hist = torch.arange(hist_steps, device=device, dtype=length.dtype)
+        delta_t = future_time[agent_ids, future_ids].to(length.dtype) - time_hist[hist_ids]
 
         edge_features = torch.stack(
             [
@@ -363,7 +364,7 @@ class Diffuser(nn.Module):
                 torch.sin(theta),
                 torch.cos(heading_delta),
                 torch.sin(heading_delta),
-                delta_t.float(),
+                delta_t,
             ],
             dim=-1,
         )
@@ -377,46 +378,67 @@ class Diffuser(nn.Module):
         map_heading: torch.Tensor,
         map_heading_valid: torch.Tensor,
         map_batch: torch.Tensor,
-        future_pos: torch.Tensor,
-        future_heading: torch.Tensor,
+        future_state: torch.Tensor,
         future_mask: torch.Tensor,
         agent_batch: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         device = map_pos.device
+        dtype = future_state.dtype
         num_map = map_pos.size(0)
-        num_agents, future_steps, _ = future_pos.shape
+        num_agents, future_steps, _ = future_state.shape
         if num_map == 0 or num_agents == 0:
             edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
-            edge_attr = torch.zeros((0, self.hidden_dim), device=device)
+            edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=dtype)
             return edge_index, edge_attr
+
+        future_pos = future_state[..., :2]
+        future_heading = torch.atan2(future_state[..., 3], future_state[..., 2])
 
         future_flat = future_pos.reshape(-1, 2)
         heading_flat = future_heading.reshape(-1)
         mask_flat = future_mask.reshape(-1)
+        if not mask_flat.any():
+            edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
+            edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=dtype)
+            return edge_index, edge_attr
+
         future_batch = agent_batch.unsqueeze(1).expand(-1, future_steps).reshape(-1)
+        valid_future = mask_flat.nonzero(as_tuple=False).squeeze(1)
+        future_flat = future_flat[valid_future]
+        heading_flat = heading_flat[valid_future]
+        future_batch = future_batch[valid_future]
 
-        valid = torch.ones((num_map, future_flat.size(0)), dtype=torch.bool, device=device)
-        valid = drop_edge_between_samples(valid, batch=(map_batch, future_batch))
-        valid = valid & mask_flat.unsqueeze(0)
+        if future_flat.numel() == 0:
+            edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
+            edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=dtype)
+            return edge_index, edge_attr
 
-        dist = torch.cdist(map_pos[:, :2], future_flat[:, :2])
-        valid = valid & (dist < self.polygon_radius)
+        batch_match = map_batch.unsqueeze(1) == future_batch.unsqueeze(0)
+        if not batch_match.any():
+            edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
+            edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=dtype)
+            return edge_index, edge_attr
+
+        # dist = torch.cdist(map_pos, future_flat)
+        # valid = (dist < self.polygon_radius) & batch_match
+        valid = batch_match
 
         if not valid.any():
             edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
-            edge_attr = torch.zeros((0, self.hidden_dim), device=device)
+            edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=dtype)
             return edge_index, edge_attr
 
-        edge_index = dense_to_sparse(valid)[0]
+        map_idx, future_local_idx = valid.nonzero(as_tuple=True)
+        future_idx = valid_future[future_local_idx]
 
         rel_vector = transform_point_to_local_coordinate(
-            map_pos[edge_index[0]],
-            future_flat[edge_index[1]],
-            heading_flat[edge_index[1]],
+            map_pos[map_idx],
+            future_flat[future_local_idx],
+            heading_flat[future_local_idx],
         )
         length, theta = compute_angles_lengths_2D(rel_vector)
-        heading_delta = wrap_angle(map_heading[edge_index[0]] - heading_flat[edge_index[1]])
-        heading_valid = map_heading_valid[edge_index[0]]
+        heading_delta = wrap_angle(map_heading[map_idx] - heading_flat[future_local_idx])
+        heading_valid = map_heading_valid[map_idx]
 
         edge_features = torch.stack(
             [
@@ -430,66 +452,25 @@ class Diffuser(nn.Module):
             dim=-1,
         )
         edge_attr = self.map_future_edge_mlp(edge_features)
+        edge_index = torch.stack([map_idx, future_idx], dim=0)
         return edge_index, edge_attr
-
-    def build_future_mask(
-        self,
-        data: Batch,
-        num_agents: int,
-        total_steps: int,
-        device: torch.device,
-    ) -> torch.Tensor:
-        agent_store = data['agent']
-        base_mask = agent_store['target_valid_mask'] if 'target_valid_mask' in agent_store else None
-        if base_mask is None:
-            base_mask = torch.ones(
-                (num_agents, max(total_steps - 1, 0)),
-                device=device,
-                dtype=torch.bool,
-            )
-        else:
-            base_mask = base_mask.to(device=device).bool()
-        need_steps = max(total_steps - 1, 0)
-        if base_mask.size(1) < need_steps:
-            pad = torch.ones(
-                (num_agents, need_steps - base_mask.size(1)),
-                device=device,
-                dtype=base_mask.dtype,
-            )
-            base_mask = torch.cat([base_mask, pad], dim=1)
-        base_mask = base_mask[:, :need_steps]
-
-        if 'current_mask' in agent_store:
-            start_mask = agent_store['current_mask'].to(device=device).bool().view(num_agents, 1)
-        else:
-            start_mask = torch.ones((num_agents, 1), device=device, dtype=torch.bool)
-        future_mask = torch.cat([start_mask, base_mask], dim=1)
-        if future_mask.size(1) < total_steps:
-            pad = torch.ones(
-                (num_agents, total_steps - future_mask.size(1)),
-                device=device,
-                dtype=future_mask.dtype,
-            )
-            future_mask = torch.cat([future_mask, pad], dim=1)
-        else:
-            future_mask = future_mask[:, :total_steps]
-        return future_mask.bool()
 
     def _build_future_future_edges(
         self,
-        future_pos: torch.Tensor,
-        future_heading: torch.Tensor,
+        future_state: torch.Tensor,
         future_mask: torch.Tensor,
         agent_batch: torch.Tensor,
         future_time: torch.Tensor,
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
-        device = future_pos.device
-        num_agents, future_steps, _ = future_pos.shape
+        device = future_state.device
+        num_agents, future_steps, _ = future_state.shape
         if num_agents == 0:
             empty_index = torch.zeros((2, 0), dtype=torch.long, device=device)
-            empty_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=future_pos.dtype)
+            empty_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=future_state.dtype)
             return (empty_index, empty_attr), (empty_index, empty_attr)
 
+        future_pos = future_state[..., :2]
+        future_heading = torch.atan2(future_state[..., 3], future_state[..., 2])
         future_flat = future_pos.reshape(-1, 2)
         heading_flat = future_heading.reshape(-1)
         mask_flat = future_mask.reshape(-1)
@@ -533,14 +514,14 @@ class Diffuser(nn.Module):
         valid = drop_edge_between_samples(valid, batch=future_batch)
         same_agent = agent_index.unsqueeze(0) == agent_index.unsqueeze(1)
         valid = valid & (~same_agent)
-        valid = valid & (~torch.eye(num_nodes, dtype=torch.bool, device=device))
+        
         if not valid.any():
             edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
             edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=future_flat.dtype)
             return edge_index, edge_attr
 
-        dist = torch.cdist(future_flat, future_flat)
-        valid = valid & (dist < self.agent_radius)
+        # dist = torch.cdist(future_flat, future_flat)
+        # valid = valid & (dist < self.agent_radius)
         if not valid.any():
             edge_index = torch.zeros((2, 0), dtype=torch.long, device=device)
             edge_attr = torch.zeros((0, self.hidden_dim), device=device, dtype=future_flat.dtype)
