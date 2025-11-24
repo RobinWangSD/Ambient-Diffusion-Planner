@@ -160,7 +160,7 @@ def main():
 
 
     segment_info = f"seg{args.diffuser_segment_length}o{args.diffuser_segment_overlap}n{args.diffuser_normalize_segments}"
-    model_info = f"hist{args.num_historical_steps}_fut{args.num_future_steps}_hd{args.hidden_dim}_heads{args.num_heads}_layers{args.diffuser_num_layers}"
+    model_info = f"ma{args.max_agents}_ts{args.agent_time_span}_hd{args.hidden_dim}_heads{args.num_heads}_layers{args.diffuser_num_layers}"
     logger_name = f"{args.name}_{segment_info}_{model_info}"
     # Setup logging
     logger = None
