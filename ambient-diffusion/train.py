@@ -89,10 +89,12 @@ def main():
     torch.set_float32_matmul_precision('high')
 
     # TODO: change training_name 
-    training_name = '{}'.format(
-        args.name,
-    )
-    save_path = f'{args.save_dir}/training_log/{args.name}/'
+    segment_info = f"seg{args.diffuser_segment_length}o{args.diffuser_segment_overlap}n{args.diffuser_normalize_segments}"
+    model_info = f"ma{args.max_agents}_ts{args.agent_time_span}_hd{args.hidden_dim}_heads{args.num_heads}_layers{args.diffuser_num_layers}"
+    logger_name = f"{args.name}_{segment_info}_{model_info}"
+
+    training_name = logger_name
+    save_path = f'{args.save_dir}/training_log/{training_name}/'
     os.makedirs(save_path, exist_ok=True)
 
     # Save args
@@ -158,10 +160,6 @@ def main():
         persistent_workers=args.persistent_workers,
     )
 
-
-    segment_info = f"seg{args.diffuser_segment_length}o{args.diffuser_segment_overlap}n{args.diffuser_normalize_segments}"
-    model_info = f"ma{args.max_agents}_ts{args.agent_time_span}_hd{args.hidden_dim}_heads{args.num_heads}_layers{args.diffuser_num_layers}"
-    logger_name = f"{args.name}_{segment_info}_{model_info}"
     # Setup logging
     logger = None
     if args.logger == 'none':
