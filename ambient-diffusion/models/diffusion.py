@@ -201,27 +201,28 @@ class DiffusionPredictor(pl.LightningModule):
 
         weight = segments_mask.float()
         if self.normalize_segments:
-            stride = self.segment_length - self.segment_overlap
-            global_segments = []
-            state_start = data['agent']['current_states']
+            mse = (pred_clean - segments) ** 2
+            # stride = self.segment_length - self.segment_overlap
+            # global_segments = []
+            # state_start = data['agent']['current_states']
             
-            for idx in range(S):
-                local = pred_clean[:, idx]
-                cos_h = state_start[:, 2].unsqueeze(1)
-                sin_h = state_start[:, 3].unsqueeze(1)
-                pos_x = local[..., 0] * cos_h - local[..., 1] * sin_h + state_start[:, None, 0]
-                pos_y = local[..., 0] * sin_h + local[..., 1] * cos_h + state_start[:, None, 1]
-                cos_theta = local[..., 2] * cos_h - local[..., 3] * sin_h
-                sin_theta = local[..., 3] * cos_h + local[..., 2] * sin_h
+            # for idx in range(S):
+            #     local = pred_clean[:, idx]
+            #     cos_h = state_start[:, 2].unsqueeze(1)
+            #     sin_h = state_start[:, 3].unsqueeze(1)
+            #     pos_x = local[..., 0] * cos_h - local[..., 1] * sin_h + state_start[:, None, 0]
+            #     pos_y = local[..., 0] * sin_h + local[..., 1] * cos_h + state_start[:, None, 1]
+            #     cos_theta = local[..., 2] * cos_h - local[..., 3] * sin_h
+            #     sin_theta = local[..., 3] * cos_h + local[..., 2] * sin_h
                 
-                global_seg = torch.stack([pos_x, pos_y, cos_theta, sin_theta], dim=-1)
-                global_segments.append(global_seg)
+            #     global_seg = torch.stack([pos_x, pos_y, cos_theta, sin_theta], dim=-1)
+            #     global_segments.append(global_seg)
                 
-                if idx + 1 < S:
-                    state_start = global_seg[:, stride - 1]
+            #     if idx + 1 < S:
+            #         state_start = global_seg[:, stride - 1]
             
-            global_pred = torch.stack(global_segments, dim=1)
-            mse = (global_pred - segments_target) ** 2
+            # global_pred = torch.stack(global_segments, dim=1)
+            # mse = (global_pred - segments_target) ** 2
         else:
             mse = (pred_clean - segments) ** 2
 
