@@ -116,6 +116,7 @@ class DiffusionPredictor(pl.LightningModule):
         segments_mask = segments_mask.bool()
 
         if self.normalize_segments:
+            segments_target = segments.clone()
             # transform each segment to its local coordinate frame
             starting_states = segments.new_zeros((A, S, 1, D))
             starting_states[:, 0, 0, :] = data['agent']['current_states']
@@ -199,7 +200,31 @@ class DiffusionPredictor(pl.LightningModule):
         )
 
         weight = segments_mask.float()
-        mse = (pred_clean - segments) ** 2
+        if self.normalize_segments:
+            stride = self.segment_length - self.segment_overlap
+            global_segments = []
+            state_start = data['agent']['current_states']
+            
+            for idx in range(S):
+                local = pred_clean[:, idx]
+                cos_h = state_start[:, 2].unsqueeze(1)
+                sin_h = state_start[:, 3].unsqueeze(1)
+                pos_x = local[..., 0] * cos_h - local[..., 1] * sin_h + state_start[:, None, 0]
+                pos_y = local[..., 0] * sin_h + local[..., 1] * cos_h + state_start[:, None, 1]
+                cos_theta = local[..., 2] * cos_h - local[..., 3] * sin_h
+                sin_theta = local[..., 3] * cos_h + local[..., 2] * sin_h
+                
+                global_seg = torch.stack([pos_x, pos_y, cos_theta, sin_theta], dim=-1)
+                global_segments.append(global_seg)
+                
+                if idx + 1 < S:
+                    state_start = global_seg[:, stride - 1]
+            
+            global_pred = torch.stack(global_segments, dim=1)
+            mse = (global_pred - segments_target) ** 2
+        else:
+            mse = (pred_clean - segments) ** 2
+
         denom = weight.sum().clamp(min=1.0)
         recon_loss = (mse * weight.unsqueeze(-1)).sum() / denom
 
@@ -328,8 +353,21 @@ class DiffusionPredictor(pl.LightningModule):
         self.log('val_minADE', min_ade, prog_bar=True, on_step=False, on_epoch=True, batch_size=A)
         self.log('val_minFDE', min_fde, prog_bar=True, on_step=False, on_epoch=True, batch_size=A)
 
-    # def on_save_checkpoint(self, checkpoint):
-    #     pass
+    def on_save_checkpoint(self, checkpoint):
+        checkpoint['sde'] = {
+            'beta_min': getattr(self._sde, '_beta_min', 0.1),
+            'beta_max': getattr(self._sde, '_beta_max', 20.0),
+        }
+
+    def on_load_checkpoint(self, checkpoint) -> None:
+        sde_cfg = checkpoint.get('sde')
+        if sde_cfg is None:
+            self._sde = VPSDE_linear()
+            return
+
+        beta_min = sde_cfg.get('beta_min', 0.1)
+        beta_max = sde_cfg.get('beta_max', 20.0)
+        self._sde = VPSDE_linear(beta_max=beta_max, beta_min=beta_min)
 
     def configure_optimizers(self):
         decay = set()

@@ -77,7 +77,7 @@ def get_args():
     parser.add_argument('--diffuser_polygon_radius', type=float, default=50.0, help='Diffuser map radius')
     parser.add_argument('--diffuser_segment_length', type=int, default=80, help='Diffuser segment length')
     parser.add_argument('--diffuser_segment_overlap', type=int, default=0, help='Diffuser segment overlap')
-    parser.add_argument('--diffuser_normalize_segments', type=bool, default=True, help='Normalize diffuser segment to the starting points')
+    parser.add_argument('--diffuser_normalize_segments', action='store_true', default=False, help='Normalize diffuser segment to the starting points')
 
     args = parser.parse_args()
 

@@ -40,8 +40,8 @@ class NuplanDataModule(pl.LightningDataModule):
         self.val_transform = TargetBuilder(num_historical_steps, num_future_steps, max_agents)
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.train_dataset = NuplanDataset(self.root, self.train_metadata_path, self.train_transform)
-        self.val_dataset = NuplanDataset(self.root, self.val_metadata_path, self.val_transform)
+        self.train_dataset = NuplanDataset(self.root, self.train_metadata_path, self.train_transform, data_type='train')
+        self.val_dataset = NuplanDataset(self.root, self.val_metadata_path, self.val_transform, data_type='val')
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.train_batch_size, shuffle=self.shuffle,
