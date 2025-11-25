@@ -192,13 +192,25 @@ def main():
         'checkpoint_dir': save_path,
     }
     dump(training_config, os.path.join(save_path, 'training_config.json'), file_format='json', indent=4)
+
+    # checkpoint_callback = ModelCheckpoint(
+    #     dirpath=save_path,
+    #     filename=None,
+    #     monitor=None,
+    #     mode='min',
+    #     save_top_k=-1,  # save all checkpoints 
+    #     every_n_train_steps=10000,
+    #     save_last=True,
+    #     verbose=True,
+    # )
+    # TODO modify the ModelCheckpoint with approriate args
     checkpoint_callback = ModelCheckpoint(
         dirpath=save_path,
-        filename=None,
-        monitor=None,
+        filename='{epoch:03d}-ade{val_minADE:.3f}-fde{val_minFDE:.3f}',
+        monitor='val_minADE',
         mode='min',
-        save_top_k=-1,  # save all checkpoints 
-        every_n_train_steps=10000,
+        save_top_k=-1,  # save all checkpoints
+        every_n_epochs=1,
         save_last=True,
         verbose=True,
     )
