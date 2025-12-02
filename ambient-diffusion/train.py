@@ -135,11 +135,13 @@ def main():
         'weight_decay': args.weight_decay,
         'warmup_epochs': args.warmup_epochs
     }
-
-    # TODO: Load from checkpoint path 
+ 
     if args.ckpt_path is not None:
         print(f'Loading model from checkpoint: {args.ckpt_path}')
-        model = None
+        model = DiffusionPredictor.load_from_checkpoint(
+            args.ckpt_path,
+            map_location='cpu',
+        )
     else:
         print('Initializing with new weights ...')
         model = DiffusionPredictor(**model_params)
