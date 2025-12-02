@@ -35,7 +35,11 @@
                 "--hidden_dim", "128",
                 "--num_heads", "8",
                 "--num_hops", "4",
-                "--dropout", "0.1"
+                "--dropout", "0.1",
+                "--diffuser_segment_length", "20", 
+                "--diffuser_segment_overlap", "10", 
+                // "--diffuser_normalize_segments", 
+                "--max_agents", "32"
             ]
         },
         {
