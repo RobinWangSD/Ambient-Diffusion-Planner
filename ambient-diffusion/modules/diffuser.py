@@ -79,6 +79,12 @@ class Diffuser(nn.Module):
         if self.segment_overlap >= self.segment_length:
             raise ValueError("segment_overlap must be smaller than segment_length.")
 
+        self.num_segments = (
+            (self.num_future_steps - self.segment_length) // (self.segment_length - self.segment_overlap)
+        ) + 1
+        if (self.segment_length - self.segment_overlap) * (self.num_segments - 1) + self.segment_length != self.num_future_steps:
+            raise ValueError("num_future_steps must align with segment_length and segment_overlap.")
+
         self.num_heads = num_heads
         self.time_embed = SinusoidalTimeEmbedding(hidden_dim)
         self.state_proj = nn.Linear(state_dim, hidden_dim)
@@ -91,6 +97,7 @@ class Diffuser(nn.Module):
             hidden_dim=hidden_dim,
             output_dim=hidden_dim,
         )
+        self.segment_temporal_embedding = nn.Parameter(torch.zeros(self.num_segments, hidden_dim))
         self.segment_pos_embed = SinusoidalTimeEmbedding(hidden_dim)
         self.time_condition_attn = nn.MultiheadAttention(
             embed_dim=hidden_dim,
@@ -271,6 +278,9 @@ class Diffuser(nn.Module):
         )
 
         segment_emb = self.segment_mlp(segments.view(num_agents, num_segments, -1))
+        segment_emb = segment_emb + self.segment_temporal_embedding.view(1, num_segments, self.hidden_dim)
+
+
         t_emb = self.time_embed(diffusion_time).unsqueeze(1)
         segment_emb = segment_emb + self.time_condition_attn(
             query=segment_emb,
