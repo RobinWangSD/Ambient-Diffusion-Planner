@@ -60,7 +60,7 @@ class StatePerturbation():
         """
         self._augment_prob = augment_prob
         self._normalize = normalize
-        self._device = torch.device(device)
+        self._device = torch.device(device) if device is not None else torch.device("cpu")
         self._low = torch.tensor(low).to(self._device)
         self._high = torch.tensor(high).to(self._device)
         self._wheel_base = get_pacifica_parameters().wheel_base
@@ -79,9 +79,23 @@ class StatePerturbation():
             [0, 0, 2, 6*T, 12*T**2, 20*T**3]
         ], device=device, dtype=torch.float32))
         self.t_matrix = torch.pow(torch.linspace(TIME_INTERVAL, REFINE_HORIZON, NUM_REFINE).unsqueeze(1), 
-                                  torch.arange(6).unsqueeze(0)).to(device=device)  # shape (B, N+1)
+                                  torch.arange(6).unsqueeze(0)).to(device=self._device)  # shape (B, N+1)
+
+    def _move_to_device(self, device: torch.device):
+        """Move internal buffers to the provided device if needed."""
+        target = torch.device(device)
+        if target == self._device:
+            return
+        self._device = target
+        self._low = self._low.to(target)
+        self._high = self._high.to(target)
+        self.coeff_matrix = self.coeff_matrix.to(target)
+        self.t_matrix = self.t_matrix.to(target)
 
     def __call__(self, inputs, ego_future, neighbors_future):
+        # Align augmentation buffers to the current batch device (per-rank in DDP)
+        self._move_to_device(inputs['ego_current_state'].device)
+
         aug_flag, aug_ego_current_state = self.augment(inputs)
         interpolated_ego_future = self.interpolation_future_trajectory(aug_ego_current_state, ego_future)
 
@@ -304,4 +318,3 @@ class StatePerturbation():
         ], dim=1)
 
         return torch.concatenate([torch.cat([traj_x, traj_y, traj_heading[..., None]], axis=-1), ego_future[:, P:, :]], axis=1)
-

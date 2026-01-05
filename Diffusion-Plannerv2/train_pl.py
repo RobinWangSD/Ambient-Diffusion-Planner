@@ -44,14 +44,11 @@ class DiffusionPlannerLightningModule(pl.LightningModule):
         self.model = Factorized_Diffusion_Planner(args)
         
         # Initialize EMA if requested
-        if args.use_ema:
-            self.model_ema = ModelEma(
-                self.model,
-                decay=0.999,
-                device=args.device,
-            )
-        else:
-            self.model_ema = None
+        self.model_ema = ModelEma(
+            self.model,
+            decay=0.999,
+            device=None,  # move to the correct device later
+        ) if args.use_ema else None
         
         # Initialize data augmentation
         self.aug = StatePerturbation(
@@ -143,6 +140,14 @@ class DiffusionPlannerLightningModule(pl.LightningModule):
     def on_train_batch_end(self, outputs, batch, batch_idx):
         if self.model_ema is not None:
             self.model_ema.update(self.model)
+    
+    def on_fit_start(self):
+        """Ensure EMA weights live on the local device for this rank."""
+        if self.model_ema is not None:
+            current_device = torch.device(self.device)
+            if getattr(self.model_ema, "device", None) != current_device:
+                self.model_ema.ema.to(device=current_device)
+                self.model_ema.device = current_device
 
     def on_save_checkpoint(self, checkpoint):
         if self.model_ema is not None:
