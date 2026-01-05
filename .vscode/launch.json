@@ -7,7 +7,7 @@
         
         {
             "name": "Python: Current File",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
@@ -15,7 +15,7 @@
         },
         {
             "name": "train_diffusion",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "/root/Ambient-Diffusion-Planner/ambient-diffusion/train.py",
             "console": "integratedTerminal",
@@ -44,7 +44,7 @@
         },
         {
             "name": "train_ar",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "/root/Ambient-Diffusion-Planner/Plan-R1/train.py",
             "console": "integratedTerminal",
@@ -52,6 +52,34 @@
             "args": [
                 "--config", "/root/Ambient-Diffusion-Planner/Plan-R1/config/train/pred_debug.yaml",
             ]
+        },
+        {
+            "name": "Debug train_pl.py (single GPU)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/root/Ambient-Diffusion-Planner/Diffusion-Plannerv2/train_pl.py",
+            "console": "integratedTerminal",
+            "env": {
+                "DP_PLOT_VALID_STATES": "debug_plots"
+            },
+            "args": [
+                "--name", "debug-train",
+                "--logger", "wandb",
+                "--train_set", "/avl-west/nuplan/nuplan-v1.1/processed",
+                "--train_metadata", "/avl-west/nuplan/file_index_pred.json",
+                "--normalization_file_path", "/root/Ambient-Diffusion-Planner/Diffusion-Plannerv2/normalization.json",
+                "--agent_num", "15",
+                "--predicted_neighbor_num", "15",
+                "--batch_size", "2",
+                "--max_files", "1000000",
+                "--num_workers", "1",
+                "--devices", "1",
+                "--accelerator", "gpu",
+                "--strategy", "ddp_find_unused_parameters_true",
+                "--use_ema", "true",
+                "--save_dir", "/root",
+            ],
+            "justMyCode": false
         }
     ]
 }
