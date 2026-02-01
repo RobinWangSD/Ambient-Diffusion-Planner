@@ -9,6 +9,7 @@ from model import PlanR1
 from utils import load_config
 
 import os
+import wandb
 
 CURRENT_FILE_PATH = os.path.realpath(__file__)
 PROJECT_ROOT = os.path.dirname(CURRENT_FILE_PATH)
@@ -36,9 +37,18 @@ if __name__ == '__main__':
 
     use_wandb = config.get("use_wandb", True)
     if use_wandb:
-        # wandb.login(key='caad08df59bfd0cb22f3613849ad66faeb65d4b0')
+        wandb.login(key="caad08df59bfd0cb22f3613849ad66faeb65d4b0")
+        # Build run name from config
+        run_name = (
+            f"plan_r1-{config['model']['mode']}"
+            f"-agents{config['datamodule'].get('max_agents', 'NA')}"
+            f"-bs{config['datamodule']['train_batch_size']}"
+            f"-lr{config['model']['lr']}"
+            f"-dim{config['model']['hidden_dim']}"
+            f"-layers{config['model']['num_attn_layers']}"
+        )
         logger = WandbLogger(
-            name='plan_r1-64_agents',
+            name=run_name,
             project='ambient_diffusion_planner',
             entity='luw015',
             log_model=True,

@@ -18,7 +18,7 @@ datamodule:
   pin_memory: True
   persistent_workers: True
   num_samples_per_second: 10
-  num_total_scenarios: 1000000
+  num_total_scenarios: 20000000
   ratio: 0.1
   parallel: True
 

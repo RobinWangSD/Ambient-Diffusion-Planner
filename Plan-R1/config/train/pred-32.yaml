@@ -5,7 +5,7 @@ universal_config: &universal_config
   interval: 5
   num_historical_steps: 20
   num_future_steps: 80
-  max_agents: 64
+  max_agents: 32
 
 datamodule:
   <<: *universal_config
@@ -18,7 +18,7 @@ datamodule:
   pin_memory: True
   persistent_workers: True
   num_samples_per_second: 10
-  num_total_scenarios: 1000000
+  num_total_scenarios: 20000000
   ratio: 0.1
   parallel: True
 
