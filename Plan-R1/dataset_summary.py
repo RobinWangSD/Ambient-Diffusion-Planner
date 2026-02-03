@@ -11,30 +11,37 @@ from multiprocessing import cpu_count
 def process_directory(args):
     """Process a single directory and return file metadata."""
     dir_name, root, mode = args
-    dir_path = Path(root) / 'nuplan-v1.1' / 'processed' / f"{dir_name}-processed-{mode}-PlanR1"
-    
+    root_path = Path(root)
+    dir_path = root_path / 'nuplan-v1.1' / 'processed' / f"{dir_name}-processed-{mode}-PlanR1"
+
     if not dir_path.exists():
         return dir_name, None
-    
+
     files_data = []
     scenario_types = defaultdict(int)
-    
+
     for file_path in dir_path.glob("*.pt"):
         parts = file_path.stem.split('-', 1)
         scenario_type = parts[0] if len(parts) == 2 else 'unknown'
         scenario_name = parts[1] if len(parts) == 2 else file_path.stem
-        
+
+        # Store relative path from root instead of full path
+        relative_path = file_path.relative_to(root_path)
+
         files_data.append({
             'filename': file_path.name,
-            'full_path': str(file_path),
+            'relative_path': str(relative_path),
             'size_mb': file_path.stat().st_size / (1024 * 1024),
             'scenario_type': scenario_type,
             'scenario_name': scenario_name
         })
         scenario_types[scenario_type] += 1
-    
+
+    # Store relative path for directory as well
+    relative_dir_path = dir_path.relative_to(root_path)
+
     return dir_name, {
-        'path': str(dir_path),
+        'path': str(relative_dir_path),
         'num_files': len(files_data),
         'total_size_mb': sum(f['size_mb'] for f in files_data),
         'scenario_types': dict(scenario_types),
@@ -134,7 +141,7 @@ def main():
         for file_info in data['files']:
             # Use filename as key for easy lookup
             file_index[file_info['filename']] = {
-                'path': file_info['full_path'],
+                'relative_path': file_info['relative_path'],
                 'dir': dir_name,
                 'scenario_type': file_info['scenario_type'],
                 'scenario_name': file_info['scenario_name'],
@@ -154,10 +161,36 @@ def main():
         'structure': structure
     }
     
+    # Save main index file
     output_path = Path(args.root_path) / f"file_index_{args.mode}.json"
     with open(output_path, 'w') as f:
         json.dump(output_data, f, indent=2, default=str)
     print(f"\nSaved to: {output_path}")
+
+    # Save per-directory JSON files for nuplan_dataset.py compatibility
+    processed_dir = Path(args.root_path) / 'nuplan-v1.1' / 'processed'
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    for dir_name, data in results.items():
+        dir_file_index = {
+            'root': args.root_path,
+            'mode': args.mode,
+            'dir_name': dir_name,
+            'num_files': data['num_files'],
+            'files': [
+                {
+                    'filename': f['filename'],
+                    'relative_path': f['relative_path'],
+                    'scenario_type': f['scenario_type'],
+                    'scenario_name': f['scenario_name']
+                }
+                for f in data['files']
+            ]
+        }
+        dir_output_path = processed_dir / f"{dir_name}-file_index-{args.mode}-PlanR1.json"
+        with open(dir_output_path, 'w') as f:
+            json.dump(dir_file_index, f, indent=2)
+        print(f"Saved: {dir_output_path}")
 
 if __name__ == "__main__":
     main()

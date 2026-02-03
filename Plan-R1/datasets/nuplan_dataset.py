@@ -1,4 +1,5 @@
 import os
+import json
 from glob import glob
 from typing import Callable, List, Optional, Tuple, Union
 import random
@@ -19,6 +20,39 @@ from datasets import get_scenario_map
 from datasets import get_filter_parameters
 from datasets import get_features
 from datasets import get_plan_scenario_types
+
+
+def load_file_index_from_json(root: str, dir_name: str, mode: str) -> Tuple[List[str], List[str]]:
+    """
+    Load file index from JSON file created by dataset_summary.py.
+
+    Args:
+        root: Root directory path
+        dir_name: Directory name (e.g., 'train_boston', 'val')
+        mode: Mode ('pred' or 'plan')
+
+    Returns:
+        Tuple of (file_names, full_paths)
+    """
+    json_path = os.path.join(root, 'nuplan-v1.1', 'processed', f"{dir_name}-file_index-{mode}-PlanR1.json")
+
+    if not os.path.exists(json_path):
+        return [], []
+
+    with open(json_path, 'r') as f:
+        data = json.load(f)
+
+    file_names = []
+    full_paths = []
+
+    for file_info in data['files']:
+        file_names.append(file_info['filename'])
+        # Construct full path from root and relative path
+        full_paths.append(os.path.join(root, file_info['relative_path']))
+
+    return file_names, full_paths
+
+
 
 
 class NuplanDataset(Dataset):
@@ -61,34 +95,36 @@ class NuplanDataset(Dataset):
             self._raw_file_names = []
             self._processed_file_names = []
             self._processed_paths = []
-            # self.processed_file_names_paths = []
             for dir_name in self.dir:
-                self._raw_file_names += os.listdir(os.path.join(self.root, 'nuplan-v1.1', 'splits', dir_name))
-                # self.processed_file_names_paths.append(
-                #     os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{dir_name}-processed_file_names-{self.mode}-PlanR1.pt")
-                # )
-                processed_file_names_path = os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{dir_name}-processed_file_names-{self.mode}-PlanR1.pt")
-                if os.path.exists(processed_file_names_path):
-                    _processed_file_names = torch.load(processed_file_names_path)
-                    print(f"Number of scenarios in {dir_name} dataset: {len(_processed_file_names)}")
-                    self._processed_file_names += _processed_file_names
+                # Try to load raw file names if splits directory exists
+                splits_dir = os.path.join(self.root, 'nuplan-v1.1', 'splits', dir_name)
+                if os.path.exists(splits_dir):
+                    self._raw_file_names += os.listdir(splits_dir)
 
-                    _processed_paths = [
-                        os.path.join(
-                            os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{dir_name}-processed-{self.mode}-PlanR1"), 
-                            name) for name in _processed_file_names
-                        ]
+                # Load from JSON file created by dataset_summary.py
+                _processed_file_names, _processed_paths = load_file_index_from_json(self.root, dir_name, self.mode)
+                if _processed_file_names:
+                    print(f"Loaded from JSON - {dir_name}: {len(_processed_file_names)} scenarios")
+                    self._processed_file_names += _processed_file_names
                     self._processed_paths += _processed_paths
+                else:
+                    print(f"Warning: No file index found for {dir_name}")
+
             print(f"Total number of scenarios in {self.mode} dataset: {len(self._processed_file_names)}")
         else:
-            self._raw_file_names = os.listdir(os.path.join(self.root, 'nuplan-v1.1', 'splits', self.dir))
-            self.processed_file_names_path = os.path.join(self.root, 'nuplan-v1.1', 'processed', f"{self.dir}-processed_file_names-{self.mode}-PlanR1.pt")
-        
-            if os.path.exists(self.processed_file_names_path):
-                self._processed_file_names = torch.load(self.processed_file_names_path)
-                print(f"Number of scenarios in {self.split} dataset: {len(self._processed_file_names)}")
-            
-            self._processed_paths = [os.path.join(self.processed_dir, name) for name in self.processed_file_names]
+            # Single directory case
+            splits_dir = os.path.join(self.root, 'nuplan-v1.1', 'splits', self.dir)
+            if os.path.exists(splits_dir):
+                self._raw_file_names = os.listdir(splits_dir)
+            else:
+                self._raw_file_names = []
+
+            # Load from JSON file created by dataset_summary.py
+            self._processed_file_names, self._processed_paths = load_file_index_from_json(self.root, self.dir, self.mode)
+            if self._processed_file_names:
+                print(f"Loaded from JSON - {self.split}: {len(self._processed_file_names)} scenarios")
+            else:
+                print(f"Warning: No file index found for {self.dir}")
         
         # should preprocess before training. see preprocess_dataset.py
         # else:
