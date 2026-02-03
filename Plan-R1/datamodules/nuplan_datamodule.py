@@ -2,6 +2,7 @@ from typing import Optional
 import pytorch_lightning as pl
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import Compose
+from torch.utils.data import Subset
 import os
 
 from datasets import NuplanDataset
@@ -29,6 +30,8 @@ class NuplanDataModule(pl.LightningDataModule):
                  num_total_scenarios: int = 1000000,
                  ratio: float = 0.1,
                  parallel: bool = True,
+                 split_train_for_val: bool = False,
+                 val_num_samples: int = 1000,
                  **kwargs) -> None:
         super(NuplanDataModule, self).__init__()
         self.root = root
@@ -48,6 +51,8 @@ class NuplanDataModule(pl.LightningDataModule):
         self.num_total_scenarios = num_total_scenarios
         self.ratio = ratio
         self.parallel = parallel
+        self.split_train_for_val = split_train_for_val
+        self.val_num_samples = val_num_samples
         self.train_transform = TokenBuilder(token_dict_path, self.interval, num_historical_steps, self.mode)
         self.val_transform = TokenBuilder(token_dict_path, self.interval, num_historical_steps, self.mode)
 
@@ -56,8 +61,19 @@ class NuplanDataModule(pl.LightningDataModule):
     #     NuplanDataset(self.root, 'val', 'val', self.mode, self.val_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
 
     def setup(self, stage: Optional[str] = None) -> None:
-        self.train_dataset = NuplanDataset(self.root, self.dir, 'train', self.mode, self.train_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
-        self.val_dataset = NuplanDataset(self.root, 'val', 'val', self.mode, self.val_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
+        if self.split_train_for_val:
+            full_dataset = NuplanDataset(self.root, self.dir, 'train', self.mode, self.train_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
+            total_len = len(full_dataset)
+            val_size = min(self.val_num_samples, total_len // 2)
+            train_size = total_len - val_size
+            train_indices = list(range(train_size))
+            val_indices = list(range(train_size, total_len))
+            self.train_dataset = Subset(full_dataset, train_indices)
+            self.val_dataset = Subset(full_dataset, val_indices)
+            print(f"Split training dataset: {train_size} train, {val_size} val")
+        else:
+            self.train_dataset = NuplanDataset(self.root, self.dir, 'train', self.mode, self.train_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
+            self.val_dataset = NuplanDataset(self.root, 'val', 'val', self.mode, self.val_transform, num_total_scenarios=self.num_total_scenarios, ratio=self.ratio, parallel=self.parallel)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.train_batch_size, shuffle=self.shuffle,
