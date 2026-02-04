@@ -20,8 +20,20 @@ if __name__ == '__main__':
 
     parser = ArgumentParser()
     parser.add_argument('--config', type=str, default='config/train/pred.yaml')
+    # CLI overrides for distributed training (compatible with torchrun)
+    parser.add_argument('--devices', type=int, default=None, help='Number of devices per node (overrides config)')
+    parser.add_argument('--accelerator', type=str, default=None, help='Accelerator type (overrides config)')
+    parser.add_argument('--strategy', type=str, default=None, help='Distributed strategy (overrides config)')
     args = parser.parse_args()
     config = load_config(args.config)
+
+    # Override config with CLI args if provided
+    if args.devices is not None:
+        config['trainer']['devices'] = args.devices
+    if args.accelerator is not None:
+        config['trainer']['accelerator'] = args.accelerator
+    if args.strategy is not None:
+        config['trainer']['strategy'] = args.strategy
 
     # Load the model from a checkpoint if provided
     if config['trainer']['ckpt_path']:
