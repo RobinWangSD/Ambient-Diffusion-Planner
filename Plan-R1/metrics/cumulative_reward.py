@@ -10,7 +10,7 @@ class CumulativeReward(Metric):
     
     def update(self,
                reward: torch.Tensor) -> None:
-        self.sum = self.sum + reward.sum()
+        self.sum = self.sum + reward.sum().detach()
         self.count = self.count + len(reward)
     
     def compute(self) -> torch.Tensor:

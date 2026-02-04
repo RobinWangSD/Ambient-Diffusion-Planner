@@ -322,6 +322,16 @@ class PlanR1(pl.LightningModule):
             self.plan_decoder_head.load_state_dict(self.pred_decoder_head.state_dict())
             self.freeze_pred_model()
 
+    def on_train_epoch_end(self):
+        # Clear GPU cache at the end of each training epoch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def on_validation_epoch_end(self):
+        # Clear GPU cache at the end of each validation epoch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
     def transition(self, data, action):
         next_data = data.clone()
 

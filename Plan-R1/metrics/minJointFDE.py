@@ -22,7 +22,7 @@ class minJointFDE(Metric):
             errors = errors[:,:,-1][:,scored_target_mask[i][:,-1]]                  #[K,ni-valid]
             joint_fde = errors.mean(dim=1)                                          #[K]
             min_joint_fde = joint_fde.min(dim=0).values                         #1
-            self.sum = self.sum + min_joint_fde
+            self.sum = self.sum + min_joint_fde.detach()
         self.count = self.count + batch_size
     
     def compute(self) -> torch.Tensor:
